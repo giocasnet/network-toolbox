@@ -47,6 +47,15 @@ some endpoint protection (EDR) products may hold back or flag the first run, esp
 scanning tools. This is expected for an unsigned program: verify the SHA-256 hash, or build the
 program yourself (see *Building the installer* below). Signing is described in *Code signing*.
 
+### Portable version
+
+The `NetworkToolbox-<version>-portable.zip` file on the Releases page needs no installation: unzip
+it anywhere (for example on a USB stick) and run `NetworkToolbox.exe`. Keep `oui.txt` next to the
+exe. While `portable.txt` is next to the exe, settings (language, theme, profiles) are saved in the
+`data` folder beside it and nothing is written to the PC's user profile; delete `portable.txt` to
+use the normal location. The same SmartScreen/EDR notes apply, and the portable version does not
+install the WebView2 runtime.
+
 ## Responsible use
 
 The scanning and probing tools (subnet scan, local network, TCP ports, SNMP, SMTP, TLS) send real
@@ -174,7 +183,7 @@ cargo test -p ntb-core
 .\build.ps1 -Thumbprint <thumbprint> # signed (certificate in Cert:\CurrentUser\My)
 ```
 
-The script runs the tests, builds, creates the installers and copies everything to `release\`
+The script runs the tests, builds, creates the installers and the portable zip and copies everything to `release\`
 together with the `SHA256SUMS.txt` file. Alternatively, without the script: `cargo tauri build`.
 
 Output in `target\release\bundle\`:
@@ -204,7 +213,7 @@ Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object Thumbprint, 
 Silent installation for all users of the PC:
 
 ```powershell
-msiexec /i "Network Toolbox_2.0.0_x64_it-IT.msi" /qn /norestart
+msiexec /i "Network Toolbox_2.1.0_x64_it-IT.msi" /qn /norestart
 ```
 
 A newer version upgrades the installed one: the MSI upgrade code is fixed in

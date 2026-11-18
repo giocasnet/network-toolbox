@@ -55,6 +55,30 @@ $sums = foreach ($f in $files) {
     $sig = (Get-AuthenticodeSignature $f.FullName).Status
     [pscustomobject]@{ File = $f.Name; SHA256 = $h.Hash; Signature = $sig }
 }
+# Portable version: folder + zip to copy onto a USB stick (no installation, settings in .\data)
+$pdir = Join-Path $out 'NetworkToolbox-portable'
+if (Test-Path $pdir) { Remove-Item $pdir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $pdir | Out-Null
+Copy-Item 'target\release\nettoolbox.exe' (Join-Path $pdir 'NetworkToolbox.exe')
+Copy-Item 'target\release\oui.txt' $pdir
+@(
+    'Network Toolbox - portable version',
+    '',
+    'The presence of this file next to NetworkToolbox.exe turns on portable mode:',
+    'settings (language, theme, profiles) are saved in the "data" folder next to the exe',
+    'instead of the user profile of the PC. Delete this file to use the normal location.',
+    '',
+    'Requires the Microsoft Edge WebView2 runtime (already included in Windows 11).',
+    'Keep oui.txt next to the exe (vendor names in Local network and Wi-Fi).'
+) | Set-Content (Join-Path $pdir 'portable.txt') -Encoding ascii
+foreach ($doc in 'LICENSE', 'NOTICE') {
+    if (Test-Path $doc) { Copy-Item $doc $pdir }
+}
+$pzip = Join-Path $out "NetworkToolbox-$ver-portable.zip"
+if (Test-Path $pzip) { Remove-Item $pzip -Force }
+Compress-Archive -Path (Join-Path $pdir '*') -DestinationPath $pzip
+$ph = Get-FileHash $pzip -Algorithm SHA256
+$sums += [pscustomobject]@{ File = (Split-Path $pzip -Leaf); SHA256 = $ph.Hash; Signature = 'n/a' }
 $sums | Format-Table -AutoSize
 $sums | ForEach-Object { "$($_.SHA256)  $($_.File)" } | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
 Write-Host "Version $ver - files ready in $out (hashes in SHA256SUMS.txt, useful for the EDR exclusion)" -ForegroundColor Green

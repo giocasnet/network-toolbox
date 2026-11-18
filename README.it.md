@@ -47,6 +47,15 @@ prodotti di protezione degli endpoint (EDR) possono trattenere o segnalare il pr
 degli strumenti di scansione. È normale per un programma non firmato: verifica l'hash SHA-256, oppure
 compila il programma da solo (vedi *Build dell'installer*). La firma è descritta in *Firma del codice*.
 
+### Versione portable
+
+Il file `NetworkToolbox-<versione>-portable.zip` della pagina Releases non richiede installazione:
+decomprimilo dove vuoi (ad esempio su una chiavetta USB) e avvia `NetworkToolbox.exe`. Tieni
+`oui.txt` accanto all'exe. Finché `portable.txt` è accanto all'exe, le impostazioni (lingua, tema,
+profili) sono salvate nella cartella `data` accanto ad esso e nel profilo utente del PC non viene
+scritto nulla; cancella `portable.txt` per usare la posizione normale. Valgono le stesse note su
+SmartScreen/EDR e la versione portable non installa il runtime WebView2.
+
 ## Uso responsabile
 
 Gli strumenti di scansione e sondaggio (scansione subnet, rete locale, porte TCP, SNMP, SMTP, TLS)
@@ -204,7 +213,7 @@ Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object Thumbprint, 
 Installazione silenziosa per tutti gli utenti del PC:
 
 ```powershell
-msiexec /i "Network Toolbox_2.0.0_x64_it-IT.msi" /qn /norestart
+msiexec /i "Network Toolbox_2.1.0_x64_it-IT.msi" /qn /norestart
 ```
 
 Una versione più recente aggiorna quella installata: l'upgrade code dell'MSI è fissato in

@@ -535,8 +535,42 @@ fn app_info() -> AppInfo {
     }
 }
 
+/// Marker file that turns on portable mode when it sits next to the executable.
+const PORTABLE_MARKER: &str = "portable.txt";
+
+/// Portable mode: WebView2 data (localStorage: language, theme, profiles) goes to a `data`
+/// folder next to the executable instead of `%LOCALAPPDATA%`, so nothing is left on the host PC
+/// and the settings travel with the USB stick. Returns `None` in the installed version, or if
+/// the folder cannot be created (read-only stick): the app then behaves as installed.
+fn portable_data_dir() -> Option<PathBuf> {
+    let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    if !dir.join(PORTABLE_MARKER).is_file() {
+        return None;
+    }
+    let data = dir.join("data");
+    std::fs::create_dir_all(&data).ok()?;
+    Some(data)
+}
+
 fn main() {
     tauri::Builder::default()
+        .setup(|app| {
+            // The main window is not created from the config (`"create": false`) so that its
+            // data folder can be chosen here.
+            let cfg = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .ok_or("finestra principale mancante nella configurazione")?;
+            let mut win = tauri::WebviewWindowBuilder::from_config(app.handle(), &cfg)?;
+            if let Some(dir) = portable_data_dir() {
+                win = win.data_directory(dir);
+            }
+            win.build()?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             ping,
             ping_stream,
