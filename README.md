@@ -204,7 +204,7 @@ Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object Thumbprint, 
 Silent installation for all users of the PC:
 
 ```powershell
-msiexec /i "Network Toolbox_1.0.0_x64_it-IT.msi" /qn /norestart
+msiexec /i "Network Toolbox_2.0.0_x64_it-IT.msi" /qn /norestart
 ```
 
 A newer version upgrades the installed one: the MSI upgrade code is fixed in
@@ -216,13 +216,13 @@ missing, the installer downloads it.
 
 - **Unprivileged ICMP**: on Windows ping and traceroute use `IcmpSendEcho` (IP Helper),
   the same API as `ping.exe` and `tracert.exe`. No need to run as administrator.
-- **Host names** (since 1.13.0): the PTR record and the NetBIOS name are looked up together (the
+- **Host names**: the PTR record and the NetBIOS name are looked up together (the
   PTR takes precedence), NetBIOS only for private addresses. Ping and traceroute start at once and
   look up the target's name in parallel with the first packet.
-- **Traceroute** (since 1.13.0): hops are probed in blocks of 8 TTLs at once and the lines come out
+- **Traceroute**: hops are probed in blocks of 8 TTLs at once and the lines come out
   in order; router names are looked up in parallel. Eight silent hops in a row end the
   traceroute after a single timeout.
-- **Scans** (subnet and Local network, since 1.13.0): in two phases. First who is there: one echo
+- **Scans** (subnet and Local network): in two phases. First who is there: one echo
   per address (two attempts of 800 ms), started in groups of 128 every 250 ms; on networks
   directly attached to the PC the MAC is read from the Windows ARP table (`GetIpNetTable2`), which
   also contains hosts that block ping, because the ping itself forces Windows to resolve
@@ -233,7 +233,7 @@ missing, the installer downloads it.
   table cannot be read to `SendARP`. On remote networks only ICMP and, if enabled, the TCP check
   remain. "Scan network" becomes "Stop" while the scan runs; once the scan is closed the table is
   in address order.
-- **TCP ports** (since 1.13.0): open ports appear as soon as they are found, with progress and
+- **TCP ports**: open ports appear as soon as they are found, with progress and
   "Stop"; 500 connections at once. Windows retries the SYN after a refusal and reports the closed
   port after about a second: to avoid this every port is first tried with a socket without SYN
   retransmission (`SIO_TCP_INITIAL_RTO`), which is valid only for certain answers (open or
@@ -255,7 +255,7 @@ missing, the installer downloads it.
   8.8.8.8 or 1.1.1.1, Spamhaus refuses the queries and the list shows as "not verifiable".
 - **Public IP**: HTTPS request to ipinfo.io. On Windows it goes through the certificate store and
   the system proxy.
-- **DNS, domain analysis** (since 1.18.0): three sources. The PC's DNS for the records; the
+- **DNS, domain analysis**: three sources. The PC's DNS for the records; the
   name servers of the parent zone and of the domain queried directly, without recursion, for
   delegation, serials and DS; a public resolver that validates DNSSEC (1.1.1.1, then 9.9.9.9) to
   tell whether the chain holds (same query, normal and with the CD bit). Signatures are not
@@ -263,7 +263,7 @@ missing, the installer downloads it.
   is recomputed). From a network that does not let port 53 out the direct queries do not
   arrive: the result says so and does not flag errors. Name servers are queried over IPv4 only.
   The zone transfer is tried only on request and stops at the first message.
-- **Email** (since 1.19.0): all queries go through the PC's DNS. The SPF record is walked in
+- **Email**: all queries go through the PC's DNS. The SPF record is walked in
   full, including nested `include`s, and DNS lookups are counted in the worst case
   (RFC 7208: `include`, `a`, `mx`, `ptr`, `exists` and `redirect` cost one each, the addresses of
   MX servers do not count); names with a macro cannot be evaluated without a message. DKIM
@@ -276,13 +276,13 @@ missing, the installer downloads it.
   clocks.
 - **TLS certificates**: the chain is verified with the Windows certificate store, so internal CAs
   and imported mkcert CAs are trusted. Details can be read even when the certificate is not
-  valid. The full handshake uses TLS 1.2 and 1.3. Legacy servers (since 1.15.0): if the server
+  valid. The full handshake uses TLS 1.2 and 1.3. Legacy servers: if the server
   rejects the handshake (reset, close, protocol or cipher alert) the app retries with TLS 1.2
   only and then with a compatibility probe that offers TLS 1.0–1.2 and obsolete ciphers (CBC,
   RSA exchange, 3DES, RC4) and reads the certificate from the ServerHello without completing the
   handshake; the result says so ("Compatibility", protocol and cipher chosen by the server).
   Timeouts and non-TLS ports do not trigger the fallbacks. The SMTP test (STARTTLS) uses only
-  the normal handshake. Since 1.17.0 the result is a list of checks plus three tabs: full
+  the normal handshake. The result is a list of checks plus three tabs: full
   certificate (key, signature, fingerprints, usages, OCSP/CRL/AIA addresses, SCT), chain from the
   server to the root and, on request, accepted versions and ciphers. The chain is the one Windows
   builds (`CertGetCertificateChain`): this also shows the intermediate CA that the server does
@@ -293,7 +293,7 @@ missing, the installer downloads it.
   stopped); OCSP and CRL are not queried, only what server and certificate declare is read.
 - **HTTP headers**: redirects are followed one by one and shown, with the transport of each
   step. The certificate is verified (Windows store); if it is not valid the request is repeated
-  without verification and the result is marked "unauthenticated response". Since 1.16.0 the
+  without verification and the result is marked "unauthenticated response". The
   request is a GET (only the headers are read) and the response is analysed: a list of
   `ok`/`warn`/`err`/`info` checks per area (transport and HSTS, security headers,
   Content-Security-Policy, cookies, server and CDN). Cookie values never leave the backend. With
@@ -305,13 +305,13 @@ missing, the installer downloads it.
 - **SNMP**: own implementation, without OpenSSL. v1/v2c; v3 with MD5, SHA-1,
   SHA-224/256/384/512 authentication and DES or AES-128 encryption. AES-192/256 are not
   supported: different variants exist across vendors. Walk with GETBULK, up to 10,000 values or
-  60 seconds. Read-only: no SET. Since 1.20.0: reading a whole device in tabs (system,
+  60 seconds. Read-only: no SET. Reading a whole device in tabs (system,
   interfaces, LLDP neighbours, MAC and ARP table) with security checks on the request (default
   community, cleartext versions, v3 level and algorithms); live interface counters (one reading
   every 5 s, speed from the difference between two readings, 64-bit if the agent has them); any
   table of rows and columns with CSV; names of 10 standard MIBs built into the program (no MIB
   files), with suggestions and tree. Profiles save host, port, version, user and protocols,
-  never community or password. Since 1.21.0 also the **Resources** views (processors, memory,
+  never community or password. Also the **Resources** views (processors, memory,
   disks, processes: HOST-RESOURCES-MIB) and **Printer** (status, toner and supplies, trays,
   alerts, pages: Printer-MIB), which appear only if the device exposes the data.
 - **SMTP server**: own SMTP client with transcript and time of each response. Banner,
@@ -338,7 +338,7 @@ missing, the installer downloads it.
   and TCP lookup (6 ports) of hosts that do not answer ping. The device type is derived from
   vendor, SNMP, NetBIOS and ports. To update the vendors: download the three IEEE CSVs again
   and regenerate `oui.txt` (format `prefix<TAB>vendor`).
-- **Local network, Neighbours tab** (since 1.22.0, `core/src/neigh/`): passive reading of the
+- **Local network, Neighbours tab** (`core/src/neigh/`): passive reading of the
   Windows neighbour table (`GetIpNetTable2` with `AF_UNSPEC`: ARP and NDP), merged by MAC
   into `Device` (IPv4 and IPv6, vendor from `oui.txt`, state, gateway and IPv6 routers); IPv6
   routers and prefixes come from the advertised routes (`GetIpForwardTable2`, Router
@@ -352,12 +352,12 @@ missing, the installer downloads it.
   towards 1.1.1.1 and `GetIfEntry2` (type: cable, Wi-Fi or VPN, also from the driver description,
   e.g. "Fortinet SSL VPN"); latencies from the ping to the gateway and from the Internet check,
   every 30 s; public IP and provider from ipinfo.io only at start, when the PC's IP or gateway
-  change, and with Home. Since 1.10.0 the Home has a world map as background
+  change, and with Home. The Home has a world map as background
   (`ui/home-map.webp`) with horizon and grid (`ui/home-ground.webp`), derived from an image
   supplied by the user; in the light theme they are the same images inverted via CSS. Path at the
   top, clock at the bottom centre; version and credits at the bottom of the side menu (hidden if
   the window is shorter than 848 px).
-- **Wi-Fi** (since 1.14.0): Windows Native Wi-Fi API (`wlanapi.dll`), no drivers or
+- **Wi-Fi**: Windows Native Wi-Fi API (`wlanapi.dll`), no drivers or
   privileges. The DLL is loaded at runtime: on Windows Server without the "WLAN AutoConfig"
   service it does not exist, and a static import would prevent the app from starting. Nearby
   networks from `WlanGetNetworkBssList` after a scan (`WlanScan`, end signalled by notification,
@@ -388,12 +388,12 @@ RUSTFLAGS="--cfg ntb_check_windows" cargo check -p ntb-core --target-dir target/
 
 1. ✅ Ping, traceroute, subnet scan, Wake-on-LAN
 2. ✅ DNS with server comparison, blacklist, TCP ports, whois, subnet calculator, public IP
-3. ✅ HTTP headers, TLS certificates, email, NTP, SNMP v1/v2c/v3 (LDAP/AD removed in 1.7.0)
+3. ✅ HTTP headers, TLS certificates, email, NTP, SNMP v1/v2c/v3 (LDAP/AD removed)
 4. ✅ Release build, bundled fonts, installer metadata, signing script
-5. ✅ Password generator (1.4.0)
-6. ✅ Local network (1.5.0)
-7. ✅ Number converter and UUID generator (1.6.0), SMTP server (1.8.0)
-9. ✅ Wi-Fi: nearby networks, channels, signal monitor (1.14.0)
+5. ✅ Password generator
+6. ✅ Local network
+7. ✅ Number converter and UUID generator, SMTP server
+9. ✅ Wi-Fi: nearby networks, channels, signal monitor
 8. ⬜ Full acceptance testing, signing and distribution
 
 ## Tests with real servers

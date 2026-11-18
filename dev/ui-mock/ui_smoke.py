@@ -25,7 +25,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
   if (cmd === 'set_lang') { window.__lang = args.lang; return null; }
   if (cmd === 'app_info') return {hostname:'SRV01.corp.example', ip:'172.16.7.42', version:'2.0.0', os:'windows'};
   if (cmd === 'internet_check') return window.__online ? {online:true, target:'1.1.1.1', rtt_ms:12.3, local_ip:'172.16.7.42'} : {online:false, target:null, rtt_ms:null};
-  // "Ferma" (Stop, since 1.11.0): interrupts the running test of the same tool
+  // "Ferma" (Stop): interrupts the running test of the same tool
   if (cmd === 'ping_stop' || cmd === 'traceroute_stop') { const f = window.__probe[cmd.replace('_stop', '')]; if (f) f(); return null; }
   if (['ping', 'ping_stream', 'traceroute', 'traceroute_stream'].includes(cmd)) {
     // like the backend: one test at a time per tool (the new one stops the previous);
@@ -102,7 +102,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
     ch.onmessage({progress:{done:2046, total:2046}});
     return {cidr:'172.16.0.0/21', total:2046, found:4, elapsed_s:31.4, stopped:false};
   }
-  // Local network, Neighbours tab (1.22.0): first read and, from the second, an IP moved to another MAC
+  // Local network, Neighbours tab: first read and, from the second, an IP moved to another MAC
   if (cmd === 'neigh_scan') {
     const n = window.__neighN = (window.__neighN || 0) + 1, probe = !!args.req.probe;
     const A = (ip, scope, state, router) => ({ip, scope: scope || '', state: state || 'reachable', iface:'Ethernet', router: !!router});
@@ -133,7 +133,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
       n_devices:5, n_v4:v4, n_v6:v6, unresolved:6, checks, probe: pr,
       csv:'MAC;Produttore;Famiglia;Indirizzo;Ambito;Stato;Scheda;Ruolo\r\n00:50:56:aa:00:01;Esempio Networks;IPv4;172.16.1.1;;reachable;Ethernet;gateway'};
   }
-  // Subnet scan and TCP ports in streaming (since 1.13.0; mocks redone after 1.15.1): like the backend,
+  // Subnet scan and TCP ports in streaming: like the backend,
   // hosts and open ports arrive on the Channel in the order they are found, the final response
   // reorders them; a new test stops the running one. Network 198.51.100.0/24 and host "lento" go on until
   // stopped; 203.0.113.0/29 = network not attached to the PC, empty; host "firewall" = all filtered.
@@ -260,7 +260,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
         not_after:'2027-12-18T10:00:00', days_remaining:412, serial:'1A2B', sans:['DNS: mail01.corp.example', 'DNS: mail.example.it'], cipher:'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
         tls_version:'TLSv1.2', expired:false, expiring_soon:false, chain:['mail01.corp.example', 'CORP-CA']}};
   }
-  // TLS certificates (since 1.17.0: checks, certificate, chain, version and cipher scan in streaming).
+  // TLS certificates (checks, certificate, chain, version and cipher scan in streaming).
   // "www.example.com" = misconfigured server (intermediate not sent, expires soon; with the scan TLS 1.0/1.1 and 3DES),
   // "legacy.corp.example" = compatibility probe, "tls12.corp.example" = fallback, any other host = all fine.
   // With scan: the result arrives at once on the Channel, then one suite every 60 ms; "Ferma" (ssl_stop) gives a partial result.
@@ -336,7 +336,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
           ck('Cipher', 'ok', 'Cipher', '5 suite, tutte con forward secrecy e cifratura autenticata')];
     return end(Object.assign({}, d, {checks:checks.concat(more), scan:{versions, tried, time_ms:9400, stopped}}));
   }
-  // DNS (since 1.18.0): comparison between servers with the response flags, and domain analysis.
+  // DNS: comparison between servers with the response flags, and domain analysis.
   // "example.com" = domain with defects (one name server down, different serials, registry and zone differ, signature about to expire),
   // "corp.example" = network that does not let DNS out (only the PC DNS, unsigned zone), "nessuno.example" = NXDOMAIN.
   if (cmd === 'dns') {
@@ -404,7 +404,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
           {status:'info', name:'DNS di questo PC', detail:'risponde senza flag AD: non valida (o non lo dichiara)'}]}};
   }
   if (cmd === 'headers') {
-    // since 1.16.0: checks, cookies (without value), CSP, CDN; the steps have time, HSTS and cookies
+    // checks, cookies (without value), CSP, CDN; the steps have time, HSTS and cookies
     const ck = (area, status, name, detail) => ({area, status, name, detail});
     if (args.req.url === 'www.example.com') return {status_code:200, status_text:'OK', final_url:'https://www.example.com/it/', authenticated:true, cdn:'Cloudflare · MXP',
       redirects:['https://example.com/', 'https://www.example.com/', 'https://www.example.com/it/'],
@@ -459,7 +459,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
         ck('Header', 'err', 'Protezione dai frame', 'né X-Frame-Options né CSP frame-ancestors'),
         ck('CSP', 'err', 'Content-Security-Policy', 'assente')]};
   }
-  // Email (since 1.19.0): {domain_report} or {message}. "example.com" = SPF over the limit, DMARC p=none, one selector
+  // Email: {domain_report} or {message}. "example.com" = SPF over the limit, DMARC p=none, one selector
   // with a short key, MTA-STS in testing; any other domain = no records. Headers with "Ordine" in the subject = message
   // authenticated with a slow hop; the others = SPF and DMARC failed, marked as spam.
   if (cmd === 'emailheader') {
@@ -534,7 +534,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
         row('warn', 'mode', 'testing', 'solo rapporti: nessun rifiuto'), row('ok', 'mx', 'mail1.example.com, mail2.example.com', 'copre tutti gli MX del dominio'), row('', 'max_age', '604800', '7 giorni')]},
       tls_rpt:row('ok', 'TLS-RPT', '_smtp._tls.example.com', 'v=TLSRPTv1; rua=mailto:tlsrpt@example.com')}};
   }
-  // Wi-Fi (since 1.14.0): window.__wifi = 'ok' | 'none' | 'location' | 'radio'
+  // Wi-Fi: window.__wifi = 'ok' | 'none' | 'location' | 'radio'
   if (cmd === 'wifi_scan') {
     const mode = window.__wifi || 'ok';
     const A = {id:'{11111111-2222-3333-4444-555555555555}', name:'Intel(R) Wi-Fi 6E AX211 160MHz', connected:true, radio: mode === 'radio' ? 'off' : 'on'};
@@ -582,7 +582,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
     }
     return {stopped, samples:n, roams:1};
   }
-  // SNMP (since 1.20.0). Whole device (snmp_device, with the sections on the Channel): "sw-core01…" = switch with
+  // SNMP. Whole device (snmp_device, with the sections on the Channel): "sw-core01…" = switch with
   // 10 interfaces, 4 LLDP neighbours, 61 MACs; "fw01" = router without LLDP or MAC table (ARP only, 32-bit counters);
   // "lento" = one section every 300 ms until stopped; "muto" = no reply. The security checks
   // depend on the request. snmp: get, walk and table ("ifTable" = 310 rows, "lldpRemTable" = empty).
@@ -743,7 +743,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
 
 
 def home_layout(pg, theme):
-    """Home checks (since 1.10.0) at the current window size."""
+    """Home checks at the current window size."""
     lay = pg.evaluate("""(() => { const r = s => document.querySelector(s).getBoundingClientRect().toJSON();
       const sb = document.querySelector('.sidebar');
       return {m: r('main'), np: r('#np'), map: r('.home-map'), ck: r('.clock-card'), t: r('#clock-time'),
@@ -815,10 +815,10 @@ with sync_playwright() as p:
         assert pg.inner_text('#np-l1-ms') == '<1 ms' and pg.inner_text('#np-l2-ms') == '12 ms', (pg.inner_text('#np-l1-ms'), pg.inner_text('#np-l2-ms'))
         assert all('ok' in pg.get_attribute(i, 'class') for i in ('#np-pc', '#np-gw', '#np-net'))
         assert 'via cavo' in pg.get_attribute('#np-pc', 'title')
-        # layout (since 1.10.0): path at the top over the full width, map in the free space,
+        # layout: path at the top over the full width, map in the free space,
         # clock at the bottom centre, version and credits at the bottom of the side menu
         assert pg.locator('.home-brand').count() == 0 and pg.locator('.home-logo').count() == 0
-        # 1.10.1: only clock and date in the box, no heading
+        # only clock and date in the box, no heading
         assert pg.locator('.clock-head').count() == 0 and 'Ora e data' not in pg.inner_text('.clock-card')
         home_layout(pg, theme)
         # the lines between nodes at half the icon height
@@ -845,10 +845,10 @@ with sync_playwright() as p:
         pg.click('#home-btn'); pg.click('#np-net')
         assert pg.locator('#view-whois').is_visible() and pg.input_value('#whois-host') == '203.0.113.130'
         pg.click('#home-btn')
-        # no placeholder; Active Directory removed in 1.7.0
+        # no placeholder; Active Directory removed
         assert pg.locator('[placeholder]').count() == 0
         assert pg.locator('.nav-item[data-view="ldap"]').count() == 0 and pg.locator('#view-ldap').count() == 0
-        # ping limits and defaults (1.11.0): packets 1-100 (4), interval 100-2000 (1000), timeout 100-5000 (2000)
+        # ping limits and defaults: packets 1-100 (4), interval 100-2000 (1000), timeout 100-5000 (2000)
         lim = lambda i: [pg.get_attribute(i, a) for a in ('value', 'min', 'max')]
         assert lim('#ping-count') == ['4', '1', '100'], lim('#ping-count')
         assert lim('#ping-interval') == ['1000', '100', '2000'], lim('#ping-interval')
@@ -869,7 +869,7 @@ with sync_playwright() as p:
         assert req['count'] == '100' and req['interval_ms'] == '1000' and req['timeout_ms'] == '2000', req
         assert pg.inner_text(PB) == 'Esegui ping' and not pg.is_disabled(PB) and box(PB) == idle_box
         pg.screenshot(path=str(OUT / f'ping-{theme}.png'))
-        # "Ferma" (1.11.0): during the test the same button, in the same place, becomes "Ferma"
+        # "Ferma": during the test the same button, in the same place, becomes "Ferma"
         def stop_flow(view, btn, label, stream, stop_cmd, how):
             n_stream, n_stop = len(calls(stream)), len(calls(stop_cmd))
             before = box(btn)
@@ -948,7 +948,7 @@ with sync_playwright() as p:
         assert req['max_hops'] == '15' and req['timeout_ms'] == '5000' and 'interval_ms' not in req, req
         assert pg.inner_text(TB) == 'Esegui traceroute' and not pg.is_disabled(TB)
         pg.screenshot(path=str(OUT / f'trace-{theme}.png'))
-        # HTTP headers (since 1.16.0: tabs Controlli, Percorso, Cookie, CSP, Header)
+        # HTTP headers (tabs Controlli, Percorso, Cookie, CSP, Header)
         # invalid certificate: unauthenticated headers, no CSP, no cookie
         pg.click('.nav-item[data-view="headers"]')
         HS = '#res-headers .strip:first-child '
@@ -1010,7 +1010,7 @@ with sync_playwright() as p:
         # the tabs of one result do not affect those of the other
         assert pg.locator('#res-headers .strip:nth-child(2) [data-rpane="csp"]').is_visible()
         assert pg.locator('#res-headers .strip:nth-child(2) [data-rpane="hdr"]').is_hidden()
-        # TLS certificates (since 1.17.0: tabs Controlli, Certificato, Catena, Protocolli e cipher; "Ferma")
+        # TLS certificates (tabs Controlli, Certificato, Catena, Protocolli e cipher; "Ferma")
         pg.click('.nav-item[data-view="ssl"]')
         XS = '#res-ssl .strip:first-child '
         XB = '#view-ssl button[type=submit]'
@@ -1101,7 +1101,7 @@ with sync_playwright() as p:
         assert 1 <= n < 15, n
         pg.screenshot(path=str(OUT / f'ssl-stopped-{theme}.png'))
         pg.uncheck('#ssl-scan'); pg.fill('#ssl-sni', ''); pg.fill('#ssl-port', '443'); pg.select_option('#ssl-proto', 'auto')
-        # DNS (since 1.18.0): comparison with the flags and the new types, then "Analisi del dominio" (domain analysis) in tabs
+        # DNS: comparison with the flags and the new types, then "Analisi del dominio" (domain analysis) in tabs
         pg.click('.nav-item[data-view="dns"]')
         DS = '#res-dns .strip:first-child '
         DB = '#view-dns [data-pane="dns-compare"] button[type=submit]'
@@ -1191,7 +1191,7 @@ with sync_playwright() as p:
         assert pg.locator('#view-dns [data-pane="dns-compare"]').is_visible() and pg.input_value('#dns-host') == 'example.com'
         pg.press('#dns-host', 'Enter'); pg.wait_for_selector('#res-dns .strip:first-child >> text=DNS A')
         assert len(calls('dns')) == n_dns + 1
-        # SNMP (since 1.20.0): device in tabs (checks, system, interfaces with live counters, neighbours,
+        # SNMP: device in tabs (checks, system, interfaces with live counters, neighbours,
         # MAC and ARP), tables with CSV, built-in names (suggestions and tree), profiles without secrets, "Ferma"
         pg.click('.nav-item[data-view="snmp"]')
         NS = '#res-snmp .strip:first-child '
@@ -1377,7 +1377,7 @@ with sync_playwright() as p:
         pg.click('#res-snmp .link-btn'); pg.wait_for_timeout(120)
         assert len(calls('snmp_monitor_stop')) >= n_ms + 1 and pg.locator('#res-snmp .strip').count() == 0
 
-        # printer and server (since 1.21.0): the Stampante and Risorse tabs exist only if the device has the data
+        # printer and server : the Stampante and Risorse tabs exist only if the device has the data
         sev = lambda: [x for x in norder()]
         pg.fill('#snmp-host', 'prn01.corp.example'); pg.click(NB)
         pg.wait_for_selector(NS + '.strip-target >> text=prn01')
@@ -1536,7 +1536,7 @@ with sync_playwright() as p:
         assert len(calls('snmp_stop')) == n_st + 1 and pg.inner_text(NB) == 'Analizza'
         pg.fill('#snmp-host', ''); pg.fill('#snmp-comm', 'public'); pg.click('#res-snmp .link-btn')
 
-        # Email (since 1.19.0): domain in tabs (SPF tree, DMARC and DKIM, MX with actions), headers in tabs
+        # Email: domain in tabs (SPF tree, DMARC and DKIM, MX with actions), headers in tabs
         pg.click('.nav-item[data-view="email"]')
         ES = '#res-email .strip:first-child '
         EB = '#view-email form[data-submit="email"] button[type=submit]'
@@ -1642,7 +1642,7 @@ with sync_playwright() as p:
         assert calls('emailheader')[-1][1] == {'domain': 'example.org', 'selector': 's1', 'ip': ''}
         assert 'nessun record per questo selettore' in pg.inner_text(ES)
         pg.fill('#email-sel', '')
-        # subnet scan in streaming (since 1.13.0; checks redone after 1.15.1)
+        # subnet scan in streaming
         # rows of the first table of the most recent result strip (hosts or open ports)
         first_rows = lambda view: pg.evaluate("v => { const t = document.querySelector('#res-' + v + ' .strip').querySelector('table');"
                                               " return t ? [...t.querySelectorAll('tbody tr')].map(r => [r.dataset.ip || r.cells[0].textContent, r.cells[1].textContent]) : []; }", view)
@@ -1697,7 +1697,7 @@ with sync_playwright() as p:
         # from a host row to the port scan
         pg.click('#res-sweep .strip >> nth=0 >> tr[data-ip="198.51.100.5"] >> [data-goto="portscan"]')
         assert pg.locator('#view-portscan').is_visible() and pg.input_value('#scan-host') == '198.51.100.5'
-        # TCP ports in streaming (since 1.13.0; checks redone after 1.15.1)
+        # TCP ports in streaming
         PSB = '#view-portscan button[type=submit]'
         ps_label, ps_box = pg.inner_text(PSB), box(PSB)
         pg.fill('#scan-host', 'fw01'); pg.fill('#scan-ports', ''); pg.click(PSB)
@@ -1768,7 +1768,7 @@ with sync_playwright() as p:
         assert pg.eval_on_selector_all('#lan-list .lan-row', 'r => r.map(x => x.dataset.ip)')[0] == '172.16.0.31'
         pg.click('#lan-list .lan-detail [data-goto="snmp"]')
         assert pg.locator('#view-snmp').is_visible() and pg.input_value('#snmp-host') == '172.16.1.47'
-        # Local network, Neighbours tab (since 1.22.0)
+        # Local network, Neighbours tab 
         pg.click('.nav-item[data-view="lan"]')
         assert pg.locator('.nav-item').count() == 21
         assert pg.locator('#view-lan [data-pane="lan-scan"]').is_visible() and pg.locator('#view-lan [data-pane="lan-neigh"]').is_hidden()
@@ -1961,7 +1961,7 @@ with sync_playwright() as p:
         pg.fill('#uuid-names', ''); pg.click('#uuid-btn')
         pg.wait_for_selector('#res-uuid .strip.err')
         assert 'almeno un nome' in pg.inner_text('#res-uuid .strip.err')
-        # SMTP server (1.8.0): item in Protocolli, options, transcript and checks
+        # SMTP server: item in Protocolli, options, transcript and checks
         pg.click('.nav-item[data-view="smtp"]')
         assert pg.locator('#view-smtp').is_visible()
         assert pg.locator('#smtp-auth-row').is_hidden() and pg.locator('#smtp-send-box').is_hidden()
@@ -1999,7 +1999,7 @@ with sync_playwright() as p:
         pg.click('#smtp-clear')
         assert pg.input_value('#smtp-host') == '' and pg.input_value('#smtp-pass') == '' and not pg.is_checked('#smtp-auth')
         assert pg.locator('#smtp-auth-row').is_hidden()
-        # Wi-Fi (since 1.14.0): item in Diagnostica after Rete locale, full menu
+        # Wi-Fi: item in Diagnostica after Rete locale, full menu
         views = pg.evaluate("[...document.querySelectorAll('.nav-group')][0].innerText.split('\\n').map(s => s.trim()).filter(Boolean)")
         assert views[:7] == ['Diagnostica', 'Ping', 'Traceroute', 'Scansione subnet', 'Rete locale', 'Wi-Fi', 'DNS'], views
         pg.click('.nav-item[data-view="wifi"]')

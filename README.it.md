@@ -204,7 +204,7 @@ Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object Thumbprint, 
 Installazione silenziosa per tutti gli utenti del PC:
 
 ```powershell
-msiexec /i "Network Toolbox_1.0.0_x64_it-IT.msi" /qn /norestart
+msiexec /i "Network Toolbox_2.0.0_x64_it-IT.msi" /qn /norestart
 ```
 
 Una versione più recente aggiorna quella installata: l'upgrade code dell'MSI è fissato in
@@ -216,13 +216,13 @@ l'installer lo scarica.
 
 - **ICMP senza privilegi**: su Windows ping e traceroute usano `IcmpSendEcho` (IP Helper),
   la stessa API di `ping.exe` e `tracert.exe`. Non serve eseguire come amministratore.
-- **Nomi degli host** (dalla 1.13.0): record PTR e nome NetBIOS si cercano insieme (il PTR ha la
+- **Nomi degli host**: record PTR e nome NetBIOS si cercano insieme (il PTR ha la
   precedenza), il NetBIOS solo per gli indirizzi privati. Ping e traceroute partono subito e
   cercano il nome del target in parallelo al primo pacchetto.
-- **Traceroute** (dalla 1.13.0): i salti si provano a blocchi di 8 TTL insieme e le righe escono
+- **Traceroute**: i salti si provano a blocchi di 8 TTL insieme e le righe escono
   in ordine; i nomi dei router si cercano in parallelo. Otto salti muti di fila chiudono il
   traceroute dopo un solo timeout.
-- **Scansioni** (subnet e Rete locale, dalla 1.13.0): in due tempi. Prima chi c'è: un echo per
+- **Scansioni** (subnet e Rete locale): in due tempi. Prima chi c'è: un echo per
   indirizzo (due tentativi da 800 ms), avviati a gruppi di 128 ogni 250 ms; sulle reti collegate
   direttamente al PC il MAC si legge dalla tabella ARP di Windows (`GetIpNetTable2`), che contiene
   anche gli host che bloccano il ping, perché il ping stesso obbliga Windows a risolverne
@@ -232,7 +232,7 @@ l'installer lo scarica.
   parte o non risponde si torna da soli a `IcmpSendEcho`, e se la tabella ARP non è leggibile a
   `SendARP`. Sulle reti remote restano ICMP e, se attivata, la verifica TCP. "Scansiona rete"
   diventa "Ferma" mentre la scansione gira; a scansione chiusa la tabella è in ordine di indirizzo.
-- **Porte TCP** (dalla 1.13.0): le porte aperte compaiono appena trovate, con avanzamento e
+- **Porte TCP**: le porte aperte compaiono appena trovate, con avanzamento e
   "Ferma"; 500 connessioni insieme. Windows ritenta il SYN dopo un rifiuto e segnala la porta
   chiusa dopo circa un secondo: per evitarlo ogni porta si prova prima con un socket senza
   ritrasmissione del SYN (`SIO_TCP_INITIAL_RTO`), che vale solo per le risposte certe (aperta o
@@ -253,7 +253,7 @@ l'installer lo scarica.
   query e la lista risulta "non verificabile".
 - **IP pubblico**: richiesta HTTPS a ipinfo.io. Su Windows passa dallo store certificati e dal
   proxy di sistema.
-- **DNS, analisi del dominio** (dalla 1.18.0): tre sorgenti. Il DNS del PC per i record; i
+- **DNS, analisi del dominio**: tre sorgenti. Il DNS del PC per i record; i
   name server della zona padre e del dominio interrogati direttamente, senza ricorsione, per
   delega, seriali e DS; un resolver pubblico che valida DNSSEC (1.1.1.1, poi 9.9.9.9) per
   sapere se la catena regge (stessa query normale e con il bit CD). Le firme non vengono
@@ -261,7 +261,7 @@ l'installer lo scarica.
   DS è ricalcolato). Da una rete che non lascia uscire la porta 53 le query dirette non
   arrivano: il risultato lo dice e non segna errori. I name server si interrogano solo su
   IPv4. Il trasferimento di zona si prova solo a richiesta e si ferma al primo messaggio.
-- **Email** (dalla 1.19.0): tutte le query passano dal DNS del PC. Il record SPF viene
+- **Email**: tutte le query passano dal DNS del PC. Il record SPF viene
   percorso per intero, compresi gli `include` annidati, e le ricerche DNS si contano nel caso
   peggiore (RFC 7208: `include`, `a`, `mx`, `ptr`, `exists` e `redirect` ne costano una, gli
   indirizzi dei server MX non contano); i nomi con una macro non si possono valutare senza un
@@ -274,13 +274,13 @@ l'installer lo scarica.
   scritti dai server, quindi i ritardi dipendono dai loro orologi.
 - **Certificati TLS**: la catena viene verificata con lo store certificati di Windows, quindi CA
   aziendali e mkcert importate risultano attendibili. I dettagli si leggono anche quando il
-  certificato non è valido. L'handshake completo usa TLS 1.2 e 1.3. Server legacy (dalla
-  1.15.0): se il server rifiuta l'handshake (reset, chiusura, alert di protocollo o di cipher)
+  certificato non è valido. L'handshake completo usa TLS 1.2 e 1.3. Server legacy: se il server rifiuta
+  l'handshake (reset, chiusura, alert di protocollo o di cipher)
   l'app riprova con solo TLS 1.2 e poi con una sonda di compatibilità che offre TLS 1.0–1.2 e
   cipher obsolete (CBC, scambio RSA, 3DES, RC4) e legge il certificato dal ServerHello senza
   completare l'handshake; il risultato lo dice ("Compatibilità", protocollo e cipher scelti dal
   server). Timeout e porte non TLS non attivano i ripieghi. Il test SMTP (STARTTLS) usa solo
-  l'handshake normale. Dalla 1.17.0 il risultato è un elenco di controlli più tre schede:
+  l'handshake normale. Il risultato è un elenco di controlli più tre schede:
   certificato completo (chiave, firma, impronte, usi, indirizzi OCSP/CRL/AIA, SCT), catena dal
   server alla radice e, a richiesta, versioni e cipher accettate. La catena è quella che
   costruisce Windows (`CertGetCertificateChain`): così si vede anche la CA intermedia che il
@@ -292,7 +292,7 @@ l'installer lo scarica.
   certificato dichiarano.
 - **Header HTTP**: i redirect vengono seguiti uno per uno e mostrati, con il trasporto di ogni
   passo. Il certificato è verificato (store di Windows); se non è valido la richiesta si ripete
-  senza verifica e il risultato è marcato "risposta non autenticata". Dalla 1.16.0 la
+  senza verifica e il risultato è marcato "risposta non autenticata". La
   richiesta è un GET (si leggono solo gli header) e la risposta viene analizzata: elenco di
   controlli `ok`/`warn`/`err`/`info` per area (trasporto e HSTS, header di sicurezza,
   Content-Security-Policy, cookie, server e CDN). I valori dei cookie non lasciano mai il
@@ -304,14 +304,14 @@ l'installer lo scarica.
 - **SNMP**: implementazione propria, senza OpenSSL. v1/v2c; v3 con autenticazione MD5, SHA-1,
   SHA-224/256/384/512 e cifratura DES o AES-128. AES-192/256 non sono supportati: esistono
   varianti diverse tra produttori. Walk con GETBULK, fino a 10.000 valori o 60 secondi.
-  Solo lettura: nessuna SET. Dalla 1.20.0: lettura di un apparato intero a schede (sistema,
+  Solo lettura: nessuna SET. Lettura di un apparato intero a schede (sistema,
   interfacce, vicini LLDP, tabella MAC e ARP) con i controlli di sicurezza sulla richiesta
   (community predefinita, versioni in chiaro, livello e algoritmi v3); contatori delle
   interfacce dal vivo (una lettura ogni 5 s, velocità dalla differenza fra due letture, a
   64 bit se l'agente li ha); qualsiasi tabella a righe e colonne con CSV; nomi di 10 MIB
   standard integrati nel programma (nessun file MIB), con suggerimenti e albero. I profili
-  salvano host, porta, versione, utente e protocolli, mai community o password. Dalla
-  1.21.0 anche le viste **Risorse** (processori, memoria, dischi, processi: HOST-RESOURCES-MIB)
+  salvano host, porta, versione, utente e protocolli, mai community o password. Anche le viste
+  **Risorse** (processori, memoria, dischi, processi: HOST-RESOURCES-MIB)
   e **Stampante** (stato, toner e materiali, vassoi, allarmi, pagine: Printer-MIB), che
   compaiono solo se l'apparato espone i dati.
 - **Server SMTP**: client SMTP proprio con trascrizione e tempo di ogni risposta. Banner,
@@ -338,7 +338,7 @@ l'installer lo scarica.
   ricerca via TCP (6 porte) degli host che non rispondono al ping. Il tipo di dispositivo si
   ricava da produttore, SNMP, NetBIOS e porte. Per aggiornare i produttori: riscaricare i tre CSV
   IEEE e rigenerare `oui.txt` (formato `prefisso<TAB>produttore`).
-- **Rete locale, scheda Vicini** (dalla 1.22.0, `core/src/neigh/`): lettura passiva della
+- **Rete locale, scheda Vicini** (`core/src/neigh/`): lettura passiva della
   tabella dei vicini di Windows (`GetIpNetTable2` con `AF_UNSPEC`: ARP e NDP), unita per MAC
   in `Device` (IPv4 e IPv6, produttore da `oui.txt`, stato, gateway e router IPv6); i router
   IPv6 e i prefissi vengono dalle route annunciate (`GetIpForwardTable2`, origine Router
@@ -352,11 +352,11 @@ l'installer lo scarica.
   verso 1.1.1.1 e `GetIfEntry2` (tipo: cavo, Wi-Fi o VPN, anche dalla descrizione del driver, es.
   "Fortinet SSL VPN"); latenze dal ping al gateway e dal controllo Internet, ogni 30 s; IP pubblico
   e provider da ipinfo.io solo all'avvio, quando cambiano IP del PC o gateway, e con Home.
-  Dalla 1.10.0 la Home ha come sfondo una mappa del mondo (`ui/home-map.webp`) con orizzonte e
+  La Home ha come sfondo una mappa del mondo (`ui/home-map.webp`) con orizzonte e
   griglia (`ui/home-ground.webp`), ricavate da un'immagine fornita dall'utente; nel tema chiaro
   sono le stesse immagini invertite via CSS. Percorso in alto, orologio in basso al centro;
   versione e crediti in fondo al menu laterale (nascosti se la finestra è più bassa di 848 px).
-- **Wi-Fi** (dalla 1.14.0): Native Wi-Fi API di Windows (`wlanapi.dll`), senza driver né
+- **Wi-Fi**: Native Wi-Fi API di Windows (`wlanapi.dll`), senza driver né
   privilegi. La DLL si carica a runtime: su Windows Server senza "Servizio LAN wireless" non
   esiste, e un'importazione statica impedirebbe l'avvio dell'app. Reti vicine da
   `WlanGetNetworkBssList` dopo una scansione (`WlanScan`, fine segnalata da notifica, ~4 s);
@@ -387,12 +387,12 @@ RUSTFLAGS="--cfg ntb_check_windows" cargo check -p ntb-core --target-dir target/
 
 1. ✅ Ping, traceroute, scansione subnet, Wake-on-LAN
 2. ✅ DNS con confronto server, blacklist, porte TCP, whois, calcolo subnet, IP pubblico
-3. ✅ Header HTTP, certificati TLS, email, NTP, SNMP v1/v2c/v3 (LDAP/AD tolto nella 1.7.0)
+3. ✅ Header HTTP, certificati TLS, email, NTP, SNMP v1/v2c/v3 (LDAP/AD tolto)
 4. ✅ Build di rilascio, font inclusi, metadati installer, script di firma
-5. ✅ Generatore di password (1.4.0)
-6. ✅ Rete locale (1.5.0)
-7. ✅ Convertitore numerico e generatore UUID (1.6.0), server SMTP (1.8.0)
-9. ✅ Wi-Fi: reti vicine, canali, monitor del segnale (1.14.0)
+5. ✅ Generatore di password
+6. ✅ Rete locale
+7. ✅ Convertitore numerico e generatore UUID, server SMTP
+9. ✅ Wi-Fi: reti vicine, canali, monitor del segnale
 8. ⬜ Collaudo completo, firma e distribuzione
 
 ## Test con server veri

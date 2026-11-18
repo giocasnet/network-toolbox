@@ -2,7 +2,7 @@
 //! verified with the system certificate store (on Windows also the corporate
 //! CAs and imported mkcert ones), but the details are read even if it is not valid.
 //!
-//! Legacy servers (since 1.15.0): if the server rejects the handshake (reset, close,
+//! Legacy servers: if the server rejects the handshake (reset, close,
 //! protocol or cipher alert) a new connection is tried offering only
 //! TLS 1.2 and, if that is not enough, a compatibility probe ([`legacy`]) that offers
 //! TLS 1.0–1.2 and obsolete ciphers and reads the certificate from the ServerHello,

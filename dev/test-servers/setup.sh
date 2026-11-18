@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test environment in the Linux sandbox: libraries to build the Tauri shell and a Net-SNMP
 # agent on 127.0.0.1:16100 (community public, v3 users u_*), for NTB_SNMP_TEST=16100.
-# Since 1.7.0 (Active Directory removed) OpenLDAP is no longer needed.
+# With Active Directory removed OpenLDAP is no longer needed.
 # Background processes are killed between turns: if snmp::tests::agente_vero fails with
 # "Porta UDP ... chiusa", run this script again.
 # DNS, HTTP, TLS and NTP are tested with fake servers started by the tests themselves.
