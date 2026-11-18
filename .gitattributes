@@ -1,0 +1,12 @@
+# Text files are stored with LF line endings.
+* text=auto eol=lf
+
+# Binary files
+*.png binary
+*.webp binary
+*.woff2 binary
+*.ico binary
+*.icns binary
+
+# Data file kept byte-for-byte as downloaded from the IEEE
+src-tauri/resources/oui.txt -text

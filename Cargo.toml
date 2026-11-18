@@ -1,0 +1,18 @@
+[workspace]
+members = ["core", "src-tauri"]
+resolver = "2"
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+authors = ["GioCas"]
+license = "Apache-2.0"
+repository = "https://github.com/giocasnet/network-toolbox"
+homepage = "https://github.com/giocasnet/network-toolbox"
+readme = "README.md"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "s"
+strip = true

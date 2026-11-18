@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Toolbox</title>
+<meta name="theme-color" content="#141c27">
+<link href="fonts/fonts.css" rel="stylesheet">
+<style>
+:root, [data-theme="dark"]{
+  --bg:#141c27; --panel:#1a2431; --raised:#223042; --sunken:#0f1620;
+  --line:#2b3a4e; --line-strong:#3a4d66;
+  --text:#e8eef5; --muted:#a3b3c4; --faint:#7a8ba0;
+  --ok:#35b8a6; --warn:#f0b13c; --err:#f0605d; --run:#7d9bc4; --info:#6ab0f3;
+  --brand:#d42a52;
+  --btn-bg:#e8eef5; --btn-fg:#141c27; --btn2-bg:transparent; --btn2-fg:#e8eef5;
+  --focus:#6ab0f3;
+  --ok-soft:rgba(53,184,166,.12); --warn-soft:rgba(240,177,60,.12); --err-soft:rgba(240,96,93,.12); --run-soft:rgba(125,155,196,.12);
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.25);
+  --scroll:#3a4d66; --scroll-hover:#4f6584;
+  --home-sky:#010a08; --home-card:rgba(8,22,22,.66); --home-filter:none; --home-blend:screen;
+  --wf-c1:#b78cf2; --wf-c2:#f29a6b; --wf-c3:#e6c35c; --wf-c4:#7fc98a; --wf-c5:#e97fb0; --wf-c6:#8fb3d9;
+  --pc-k:#e8eef5; --pc-c:#1fb5d4; --pc-m:#d0489a; --pc-y:#e5b800; --pc-o:#7a8ba0;
+  color-scheme:dark;
+}
+[data-theme="light"]{
+  --bg:#eef2f6; --panel:#ffffff; --raised:#f4f7fa; --sunken:#f7f9fb;
+  --line:#d6dee8; --line-strong:#bccad9;
+  --text:#142030; --muted:#4f5f73; --faint:#6b7a8d;
+  --ok:#0e8a7a; --warn:#a86a00; --err:#c63a37; --run:#4a6a96; --info:#1f6fc0;
+  --brand:#cd1543;
+  --btn-bg:#142030; --btn-fg:#ffffff; --btn2-bg:transparent; --btn2-fg:#142030;
+  --focus:#1f6fc0;
+  --ok-soft:rgba(14,138,122,.09); --warn-soft:rgba(168,106,0,.09); --err-soft:rgba(198,58,55,.08); --run-soft:rgba(74,106,150,.09);
+  --shadow:0 1px 2px rgba(20,32,48,.06), 0 6px 18px rgba(20,32,48,.06);
+  --scroll:#bccad9; --scroll-hover:#94a6ba;
+  --home-sky:#010a08; --home-card:rgba(255,255,255,.80); --home-filter:invert(1) hue-rotate(180deg) saturate(.7) brightness(1.05); --home-blend:multiply;
+  --wf-c1:#7a4fc4; --wf-c2:#c2602a; --wf-c3:#9c7a00; --wf-c4:#2f8a42; --wf-c5:#b8336f; --wf-c6:#3f6f9f;
+  --pc-k:#142030; --pc-c:#0a8fb0; --pc-m:#b0307c; --pc-y:#c79a00; --pc-o:#6b7a8d;
+  color-scheme:light;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:'Instrument Sans',system-ui,sans-serif; font-size:15px; line-height:1.55;
+  display:grid; grid-template-columns:264px 1fr; grid-template-rows:auto minmax(0,1fr); overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px; border-radius:6px}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.hidden{display:none!important}
+
+/* ───────── Scrollbars (follow the theme) ───────── */
+*{scrollbar-color:var(--scroll) transparent}
+::-webkit-scrollbar{width:10px; height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--scroll); border-radius:8px; border:2px solid transparent; background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background-color:var(--scroll-hover)}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* ───────── Top bar ───────── */
+.topbar{grid-column:1 / -1; display:flex; align-items:stretch; background:var(--panel); border-bottom:1px solid var(--line); height:40px; user-select:none; -webkit-user-select:none}
+.topbar .brand{width:264px; flex-shrink:0; border-bottom:0; border-right:1px solid var(--line); padding:0 14px; gap:9px}
+.topbar .brand img{width:20px; height:20px}
+.topbar .brand-name{font-size:14px}
+.sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+.top-drag{flex:1; min-width:0}
+.top-actions{display:flex; align-items:center; gap:6px; padding:0 10px}
+.top-btn.svc{padding:0; width:30px; justify-content:center; cursor:default}
+/* Window buttons (custom title bar) */
+.win-ctl{display:flex; align-items:stretch}
+.win-ctl button{width:46px; border:0; background:none; color:var(--muted); display:grid; place-items:center; cursor:default}
+.win-ctl button:hover{background:var(--raised); color:var(--text)}
+.win-ctl #win-close:hover{background:#c42b1c; color:#fff}
+.win-ctl svg{width:10px; height:10px; stroke:currentColor; fill:none; stroke-width:1}
+.top-btn{display:inline-flex; align-items:center; gap:6px; height:28px; border:1px solid var(--line); background:none; color:var(--muted); border-radius:7px; padding:0 10px; font:inherit; font-size:13px; cursor:pointer}
+.top-btn .flag{width:20px; height:14px; border-radius:2px; stroke:none; box-shadow:0 0 0 1px var(--line-strong); display:block}
+#lang-ico{display:inline-flex}
+.top-btn:hover{color:var(--text); border-color:var(--line-strong)}
+.top-btn svg{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round}
+.top-btn[aria-pressed="true"]{color:var(--text); background:var(--raised); border-color:var(--line-strong)}
+
+/* ───────── Sidebar ───────── */
+.sidebar{background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; overflow-y:auto; min-height:0}
+.brand{display:flex; align-items:center; gap:12px; padding:14px 18px; border-bottom:1px solid var(--line)}
+.brand img{width:40px; height:40px; object-fit:contain; flex-shrink:0; background:none}
+.brand-mark{width:40px; height:40px; border-radius:9px; background:var(--brand); color:#fff; display:grid; place-items:center; font-weight:700; font-size:15px; flex-shrink:0}
+.brand-name{font-weight:600; font-size:16px; letter-spacing:-.01em; line-height:1.2}
+.brand-host{font-size:12.5px; color:var(--faint); font-family:'JetBrains Mono',monospace; margin-top:2px}
+
+nav{padding:10px 12px 0; flex:1}
+.nav-group{margin-bottom:4px}
+.nav-group-title{font-size:12px; color:var(--faint); font-weight:500; padding:4px 10px 2px; letter-spacing:.02em}
+.nav-item{
+  position:relative; display:flex; align-items:center; gap:12px; width:100%;
+  padding:4px 10px; border:0; border-radius:7px; background:none; cursor:pointer;
+  color:var(--muted); font:inherit; font-size:14px; line-height:1.45; text-align:left;
+}
+.nav-item:hover{background:var(--raised); color:var(--text)}
+.nav-item[aria-current="page"]{background:var(--raised); color:var(--text); font-weight:600}
+.nav-item[aria-current="page"]::before{content:''; position:absolute; left:-12px; top:6px; bottom:6px; width:3px; border-radius:0 3px 3px 0; background:var(--brand)}
+.ni{width:18px; height:18px; flex-shrink:0; stroke:currentColor; fill:none; stroke-width:1.4; stroke-linecap:round; stroke-linejoin:round}
+
+.svc{display:flex; align-items:center; gap:8px}
+.svc-dot{width:8px; height:8px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft)}
+.svc.down .svc-dot{background:var(--err); box-shadow:0 0 0 3px var(--err-soft)}
+.svc.checking .svc-dot{background:var(--faint); box-shadow:0 0 0 3px var(--run-soft)}
+
+/* ───────── Main ───────── */
+main{overflow-y:auto; min-height:0}
+.view{display:none; max-width:1120px; padding:40px 48px 64px}
+.view.active{display:block}
+.view-head{margin-bottom:24px}
+h1{font-size:30px; font-weight:600; letter-spacing:-.02em; line-height:1.15}
+.lede{color:var(--muted); font-size:15.5px; margin-top:8px; max-width:68ch}
+
+/* Home screen (1.10.0): world map in the background, network path at the top, clock at the bottom.
+   In the light theme the images are the same, inverted with --home-filter; the map blends with the background
+   (--home-blend: screen on black, multiply on white), so the horizon stays visible under the map. */
+#view-home.active{position:relative; isolation:isolate; overflow:hidden; display:flex; flex-direction:column; align-items:center; max-width:none; min-height:100%; padding:14px 22px 16px; text-align:center}
+.home-bg{position:absolute; inset:0; z-index:-1; pointer-events:none; filter:var(--home-filter);
+  background:var(--home-sky)}
+.home-map{flex:1; align-self:stretch; min-height:120px; margin:12px 0; pointer-events:none; filter:var(--home-filter); mix-blend-mode:var(--home-blend);
+  background:url(home-map.webp) center / contain no-repeat;
+  -webkit-mask-image:linear-gradient(to bottom, transparent, #000 7%, #000 93%, transparent), linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+  -webkit-mask-composite:source-in; mask-composite:intersect}
+.home-card{background:var(--home-card); border:1px solid color-mix(in srgb, var(--ok) 50%, transparent); border-radius:14px;
+  box-shadow:0 0 18px color-mix(in srgb, var(--ok) 22%, transparent), inset 0 0 12px color-mix(in srgb, var(--ok) 6%, transparent);
+  -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px)}
+/* Network path: PC → gateway → Internet, full width */
+.np{display:flex; align-items:flex-start; justify-content:space-between; width:100%; padding:4px 18px}
+.np-node{display:flex; flex-direction:column; align-items:center; gap:2px; min-width:110px; max-width:230px; padding:6px 10px; border:0; border-radius:10px; background:none; color:inherit; font:inherit; cursor:pointer}
+.np-node:hover{background:color-mix(in srgb, var(--ok) 12%, transparent)}
+.np-ico{width:26px; height:26px; color:var(--faint); margin-bottom:2px}
+.np-ico svg{width:26px; height:26px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round}
+.np-node.ok .np-ico{color:var(--ok)} .np-node.down .np-ico{color:var(--err)}
+.np-name{max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted)}
+.np-ip{font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600}
+.np-link{display:flex; align-items:center; gap:8px; flex:1; min-width:52px; margin-top:8px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); white-space:nowrap}
+.np-link i{flex:1; height:1px; background:color-mix(in srgb, var(--ok) 55%, transparent)}
+.np-link span{padding:1px 9px; border:1px solid color-mix(in srgb, var(--ok) 55%, transparent); border-radius:20px; color:var(--text)}
+.np-link.down{color:var(--err)} .np-link.down span{border-color:var(--err); color:var(--err)}
+.np-link.down i{height:2px; background:repeating-linear-gradient(90deg, var(--err) 0 6px, transparent 6px 10px)}
+/* 24-hour clock with date, bottom centre, above the horizon and the grid (home-ground.webp) */
+.home-foot{position:relative; align-self:stretch; display:flex; justify-content:center; margin:0 -22px -16px; padding:56px 22px 16px}
+.home-foot::before{content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; filter:var(--home-filter);
+  background:url(home-ground.webp) center top / 100% auto no-repeat;
+  -webkit-mask-image:linear-gradient(to bottom, transparent, #000 28px); mask-image:linear-gradient(to bottom, transparent, #000 28px)}
+.clock-card{width:330px; max-width:100%; overflow:hidden}
+.clock-time{display:block; padding-top:14px; font-size:40px; font-weight:600; line-height:1.1; letter-spacing:-.01em; font-variant-numeric:tabular-nums}
+.clock-date{padding:4px 12px 14px; font-size:12.5px; color:var(--muted)}
+/* Version and credits at the bottom of the side menu */
+.side-credits{padding:6px 22px 10px; font-size:10.5px; line-height:1.4; color:var(--faint)}
+/* window shorter than the full menu (747 px + 60 of credits): the credits are hidden so the menu does not
+   scroll because of them; below 787 px the items get tighter still, and the menu stays complete down to ~722 px */
+@media (max-height: 847px){ .side-credits{display:none} }
+@media (max-height: 786px){
+  nav{padding-top:6px}
+  .nav-item{padding:3px 10px}
+  .nav-group-title{padding:2px 10px 0}
+}
+
+/* Form panel */
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px 24px; box-shadow:var(--shadow)}
+.panel + .panel{margin-top:16px}
+.panel-title{font-size:16px; font-weight:600; margin-bottom:14px}
+.row{display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end}
+.row + .row{margin-top:14px}
+.field{display:flex; flex-direction:column; gap:6px; min-width:0}
+.field.grow{flex:1 1 280px}
+.field label, .field .lbl{font-size:13px; font-weight:500; color:var(--muted)}
+input[type=text],input[type=number],input[type=password],select,textarea{
+  font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text);
+  background:var(--sunken); border:1px solid var(--line-strong); border-radius:8px;
+  padding:10px 12px; min-width:0; width:100%; transition:border-color .12s, box-shadow .12s;
+}
+input:hover,select:hover,textarea:hover{border-color:var(--faint)}
+input:focus,select:focus,textarea:focus{outline:none; border-color:var(--focus); box-shadow:0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent)}
+input::placeholder,textarea::placeholder{color:var(--faint); opacity:.75}
+select{cursor:pointer; font-family:'Instrument Sans',sans-serif; font-size:14.5px}
+textarea{resize:vertical; line-height:1.6; font-size:13px}
+.w-host{width:300px} .w-xs{width:96px} .w-sm{width:160px} .w-md{width:220px}
+.check{display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); padding-bottom:11px; cursor:pointer}
+.check input{width:17px; height:17px; accent-color:var(--focus)}
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  font:inherit; font-size:14.5px; font-weight:600; border-radius:8px; padding:10px 20px;
+  border:1px solid var(--btn-bg); background:var(--btn-bg); color:var(--btn-fg); cursor:pointer;
+  transition:transform .06s, opacity .12s; white-space:nowrap;
+}
+.btn:hover{opacity:.9}
+.btn:active{transform:translateY(1px)}
+.btn.secondary{background:var(--btn2-bg); color:var(--btn2-fg); border-color:var(--line-strong)}
+.btn.secondary:hover{border-color:var(--faint); opacity:1}
+.btn:disabled{opacity:.45; cursor:progress}
+
+.presets{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; align-items:center}
+.presets-lbl{font-size:13px; color:var(--faint); margin-right:4px}
+.chip{border:1px solid var(--line); background:var(--raised); color:var(--muted); border-radius:999px; padding:5px 12px; font:inherit; font-size:13px; cursor:pointer}
+.chip:hover{color:var(--text); border-color:var(--line-strong)}
+
+.seg{display:inline-flex; padding:3px; gap:3px; background:var(--sunken); border:1px solid var(--line); border-radius:10px; margin-bottom:18px}
+.seg button{border:0; background:none; color:var(--muted); font:inherit; font-size:14px; padding:7px 16px; border-radius:7px; cursor:pointer}
+.seg button[aria-selected="true"]{background:var(--raised); color:var(--text); font-weight:600; box-shadow:0 0 0 1px var(--line-strong)}
+
+.note{font-size:13px; color:var(--faint); margin-top:12px}
+
+/* ───────── Result strips ───────── */
+.results{margin-top:28px}
+.results-bar{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+.results-bar h2{font-size:16px; font-weight:600}
+.link-btn{border:0; background:none; color:var(--muted); font:inherit; font-size:13.5px; cursor:pointer; text-decoration:underline; text-underline-offset:3px}
+.link-btn:hover{color:var(--text)}
+.empty{border:1px dashed var(--line-strong); border-radius:12px; padding:28px; color:var(--faint); font-size:14.5px; text-align:center}
+
+.strip{
+  display:grid; grid-template-columns:6px 1fr; background:var(--panel);
+  border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-bottom:12px; box-shadow:var(--shadow);
+}
+.strip-band{background:var(--run)}
+.strip.ok .strip-band{background:var(--ok)}
+.strip.warn .strip-band{background:var(--warn)}
+.strip.err .strip-band{background:var(--err)}
+.strip.stop .strip-band{background:var(--faint)}
+.strip-head{display:flex; align-items:center; gap:14px; padding:12px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap}
+.strip-tool{font-weight:600; font-size:14.5px}
+.strip-target{font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text); background:var(--raised); border-radius:6px; padding:2px 9px; word-break:break-all}
+.strip-state{font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; color:var(--run)}
+.strip.ok .strip-state{color:var(--ok)} .strip.warn .strip-state{color:var(--warn)} .strip.err .strip-state{color:var(--err)}
+.strip.stop .strip-state{color:var(--muted)}
+.strip-time{margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--faint)}
+.strip-copy{border:1px solid var(--line); background:none; color:var(--muted); border-radius:6px; padding:3px 10px; font:inherit; font-size:12.5px; cursor:pointer}
+.strip-copy:hover{color:var(--text); border-color:var(--line-strong)}
+.strip-body{padding:16px; min-width:0}
+.strip.run .strip-body{color:var(--muted); font-size:14px}
+.spinner{display:inline-block; width:14px; height:14px; border:2px solid var(--line-strong); border-top-color:var(--run); border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.strip.fresh{animation:land .35s ease-out}
+@keyframes land{from{opacity:0; transform:translateY(-6px)}to{opacity:1; transform:none}}
+
+pre.out{
+  font-family:'JetBrains Mono',monospace; font-size:13.5px; line-height:1.7; color:var(--text);
+  background:var(--sunken); border:1px solid var(--line); border-radius:8px; padding:14px 16px;
+  white-space:pre-wrap; word-break:break-word; max-height:460px; overflow:auto;
+}
+pre.out + *, * + pre.out{margin-top:14px}
+.c-ok{color:var(--ok)} .c-warn{color:var(--warn)} .c-err{color:var(--err)} .c-ip{color:var(--info)} .c-dim{color:var(--faint)} .c-key{color:var(--muted)}
+
+.msg-err{color:var(--err); font-size:14.5px; display:flex; gap:8px; align-items:flex-start}
+.msg-err::before{content:'✕'; font-weight:700}
+
+/* Structured data */
+.kv{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px}
+.kv-item{background:var(--raised); border-radius:8px; padding:11px 14px; min-width:0}
+.kv-k{font-size:12.5px; color:var(--muted); font-weight:500}
+.kv-v{font-family:'JetBrains Mono',monospace; font-size:15.5px; margin-top:3px; word-break:break-all}
+.kv-item.big .kv-v{font-size:19px; font-weight:500}
+.kv-item.txt .kv-v{font-family:'Instrument Sans',sans-serif; font-weight:600; word-break:normal; overflow-wrap:anywhere}
+.kv-item.ok .kv-v{color:var(--ok)} .kv-item.warn .kv-v{color:var(--warn)} .kv-item.err .kv-v{color:var(--err)} .kv-item.info .kv-v{color:var(--info)}
+
+table.tbl{width:100%; border-collapse:collapse; font-size:14px}
+.tbl th{text-align:left; font-weight:500; font-size:13px; color:var(--muted); padding:8px 12px; border-bottom:1px solid var(--line-strong)}
+.tbl td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td.k{color:var(--muted); width:220px; font-size:13.5px}
+.tbl td.v, .tbl td.m{font-family:'JetBrains Mono',monospace; font-size:13.5px; word-break:break-word; white-space:pre-wrap}
+.tbl td.v.ok{color:var(--ok)} .tbl td.v.warn{color:var(--warn)} .tbl td.v.err{color:var(--err)}
+
+.pill{white-space:nowrap; display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; border-radius:999px; padding:2px 10px}
+.pill.ok{background:var(--ok-soft); color:var(--ok)}
+.pill.warn{background:var(--warn-soft); color:var(--warn)}
+.pill.err{background:var(--err-soft); color:var(--err)}
+.pill.neutral{background:var(--raised); color:var(--muted)}
+.tags{display:flex; flex-wrap:wrap; gap:6px}
+.tag{font-family:'JetBrains Mono',monospace; font-size:12.5px; background:var(--raised); color:var(--text); border-radius:6px; padding:3px 9px}
+.sub{font-size:14px; font-weight:600; margin:18px 0 10px}
+.sub:first-child{margin-top:0}
+.summary{font-size:14.5px; color:var(--muted); margin-bottom:12px}
+.summary strong{color:var(--text)}
+
+.checks{display:flex; flex-direction:column; gap:8px}
+.check-line{display:grid; grid-template-columns:120px 92px 1fr; gap:14px; align-items:center; padding:10px 14px; background:var(--raised); border-radius:8px}
+.check-line .name{font-weight:600}
+.smtp-checks td:first-child{width:1%; white-space:nowrap}
+.smtp-checks td.k{width:200px}
+/* tabs inside a result and HTTP headers analysis */
+.seg.rtabs{margin:18px 0 14px}
+.seg.rtabs .n{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--faint); margin-left:5px}
+.note.hx-top{margin:0 0 12px}
+.hx-pill{min-width:22px; justify-content:center}
+.hx-tbl td{vertical-align:middle}
+.hx-tbl td.m{white-space:normal}
+.hx-tbl td.hx-area{width:110px}
+.hx-ck .pill, .hx-hop .pill{font-size:11px; padding:0 8px}
+.hx-ck td.m, .hx-ck th{white-space:nowrap; word-break:normal}
+.hx-ck td:first-child .pill{font-size:12.5px; padding:2px 10px}
+.hx-name{font-family:'JetBrains Mono',monospace; font-size:13.5px; font-weight:600}
+.hx-dim{color:var(--faint)}
+.hx-tbl td.hx-ver{width:90px}
+.dx-seg{margin:0 0 16px}
+.sp-tree{border-top:1px solid var(--line)}
+.sp-node{display:grid; grid-template-columns:1fr auto; gap:12px; align-items:start; padding:9px 12px 9px calc(12px + var(--l) * 26px); border-bottom:1px solid var(--line); position:relative}
+.sp-node::before{content:''; position:absolute; left:calc(14px + (var(--l) - 1) * 26px); top:0; bottom:0; width:2px; background:var(--line-strong)}
+.sp-node.root::before{display:none}
+.sp-mech{font-family:'JetBrains Mono',monospace; font-size:13.5px; font-weight:600; word-break:break-all}
+.sp-res{font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--muted); margin-top:3px; word-break:break-all}
+.hx-why.sp-err{color:var(--err)}
+.sp-tags{display:flex; gap:6px; white-space:nowrap}
+.sp-node .pill{font-size:11px; padding:0 8px}
+.hx-tbl td.sp-tag{width:130px}
+.hx-ck td.sp-wrap{white-space:pre-line}
+.dx-type{font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px}
+.dx-val{font-family:'JetBrains Mono',monospace; font-size:13px; word-break:break-all}
+.hx-why.dx-own{font-family:'JetBrains Mono',monospace; margin:0 0 2px}
+.tbl td.dx-ttl, .tbl th.dx-ttl{font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--faint); white-space:nowrap; text-align:right}
+.tbl th.dx-ttl{font-family:inherit}
+.hx-tbl td.dx-who{width:280px}
+.dx-flags{display:block; margin-top:4px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--faint); cursor:help}
+#ssl-port{width:96px}
+.tbl td.hx-long{word-break:break-all; font-size:12.5px}
+.summary.hx-run{margin:14px 0 0}
+.hx-tbl td .spinner{margin:0 4px}
+.hx-why{display:block; font-size:12.5px; color:var(--muted); margin-top:3px}
+.hx-src{display:inline-block; font-family:'JetBrains Mono',monospace; font-size:12.5px; background:var(--raised); border-radius:5px; padding:1px 7px; margin:2px 4px 2px 0}
+.hx-src.bad{background:var(--err-soft); color:var(--err)}
+.hx-src.weak{background:var(--warn-soft); color:var(--warn)}
+.hx-hop{display:grid; grid-template-columns:26px 1fr auto; gap:12px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--line)}
+.hx-hop:last-child{border-bottom:0}
+.hx-hop .u{font-family:'JetBrains Mono',monospace; font-size:13.5px; word-break:break-all}
+.hx-hop .t{font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--faint); white-space:nowrap}
+.hx-hop .meta{display:flex; gap:6px; flex-wrap:wrap; margin-top:5px}
+.hx-n{width:24px; height:24px; border-radius:50%; background:var(--raised); color:var(--muted); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center}
+.check-line .detail{font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--muted); word-break:break-all}
+
+
+/* Options, host names, row actions */
+.opts{display:flex; flex-wrap:wrap; gap:6px 22px; margin-top:16px}
+.opts .check{padding-bottom:0}
+/* SNMP: table views, built-in names, profiles */
+.sn-prof{margin:0 0 16px}
+.sn-seg2{margin:18px 0 14px}
+.sn-note{margin-top:14px}
+.sn-what{display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; padding-bottom:9px}
+.sn-what .check{padding-bottom:0}
+#snmp-go{margin-left:auto}
+#snmp-port{width:96px}
+#snmp-seclevel{width:230px}
+.sn-tools{display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px}
+.sn-tools .summary{margin:0}
+.sn-tools .r{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.sn-tools label, .sn-tree-h label{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); white-space:nowrap}
+.sn-btn{font-family:'Instrument Sans',sans-serif; white-space:nowrap; border:1px solid var(--line-strong); background:none; color:var(--text); border-radius:7px; padding:5px 12px; font-size:13px; font-weight:600; cursor:pointer}
+.sn-btn:hover{border-color:var(--faint)}
+.sn-btn.go{background:var(--btn-bg); color:var(--btn-fg); border-color:var(--btn-bg)}
+.sn-live{display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--ok); font-weight:600}
+.sn-live i{width:8px; height:8px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 4px var(--ok-soft)}
+.sn-live.off{color:var(--muted)}
+input.sn-find{width:230px; padding:6px 10px; font-size:13px}
+.sn-wrap{overflow-x:auto}
+.tbl.sn td, .tbl.sn th{padding:8px 10px; vertical-align:middle}
+.tbl.sn th.num, .tbl.sn td.num{text-align:right}
+.tbl.sn td.num{font-family:'JetBrains Mono',monospace; font-size:13px; white-space:nowrap}
+.tbl.sn td.num.l{text-align:left; white-space:pre-line}
+.tbl.sn td.sn-rest{text-align:center}
+.sn-port{font-family:'JetBrains Mono',monospace; font-size:13.5px; font-weight:600}
+.sn-sub{display:block; font-size:12px; color:var(--faint); margin-top:1px}
+.sn-rate{display:inline-block; min-width:92px; text-align:right}
+.sn-bar{display:block; height:3px; background:var(--raised); border-radius:2px; margin-top:4px; overflow:hidden}
+.sn-bar i{display:block; height:100%; background:var(--info); border-radius:2px}
+.sn-bar i.hot{background:var(--warn)}
+.tbl.sn tr.off td{color:var(--faint)}
+.tbl.sn tr.off .sn-port{font-weight:500}
+.tbl.sn .pill{font-size:11px; padding:0 8px}
+.hx-hop.sn-nb{grid-template-columns:auto 1fr auto}
+.sn-nb .u b{font-weight:600}
+.sn-nb .u .arrow{color:var(--faint); margin:0 8px}
+.sn-nb .hx-n{width:auto; min-width:44px; padding:0 8px; border-radius:12px; font-family:'JetBrains Mono',monospace; font-size:12px}
+.sn-sec{display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:12px; font-size:13px; color:var(--muted)}
+.sn-sec span{display:inline-flex; align-items:center; gap:6px}
+.sn-sec .pill{font-size:11px; padding:0 6px}
+.rs-cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; margin-bottom:6px}
+.rs-card{border:1px solid var(--line); border-radius:10px; padding:12px 14px; background:var(--panel)}
+.rs-card .t{font-size:12px; color:var(--faint); text-transform:uppercase; letter-spacing:.05em}
+.rs-card .big{font-size:26px; font-weight:600; margin:2px 0 8px}
+.rs-card .big small{font-size:13px; font-weight:400; color:var(--muted); margin-left:6px}
+.rs-row{display:grid; grid-template-columns:minmax(150px,230px) 1fr minmax(120px,210px); gap:14px; align-items:center; padding:9px 4px; border-bottom:1px solid var(--line)}
+.rs-row:last-child{border-bottom:0}
+.rs-row .nm{font-weight:600; font-size:14px; min-width:0; overflow-wrap:anywhere}
+.rs-row .nm small{display:block; font-weight:400; color:var(--faint); font-size:12px; margin-top:1px; font-family:'JetBrains Mono',monospace}
+.rs-row .v{font-family:'JetBrains Mono',monospace; font-size:13px; text-align:right; white-space:nowrap}
+.rs-bar{height:10px; border-radius:5px; background:var(--raised); overflow:hidden}
+.rs-card .rs-bar{height:8px}
+.rs-bar i{display:block; height:100%; border-radius:5px; background:var(--ok)}
+.rs-bar i.warn{background:var(--warn)}
+.rs-bar i.err{background:var(--err)}
+.rs-bar i.neutral{background:var(--faint)}
+.rs-bar i.pc-black{background:var(--pc-k)} .rs-bar i.pc-cyan{background:var(--pc-c)} .rs-bar i.pc-magenta{background:var(--pc-m)} .rs-bar i.pc-yellow{background:var(--pc-y)} .rs-bar i.pc-other{background:var(--pc-o)}
+.sw{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; box-shadow:0 0 0 1px var(--line-strong)}
+.sw.pc-black{background:var(--pc-k)} .sw.pc-cyan{background:var(--pc-c)} .sw.pc-magenta{background:var(--pc-m)} .sw.pc-yellow{background:var(--pc-y)} .sw.pc-other{background:var(--pc-o)}
+@media (max-width:760px){ .rs-row{grid-template-columns:1fr 90px} .rs-row .rs-bar{grid-column:1 / -1; order:3} }
+.sn-tree{border:1px solid var(--line); border-radius:10px; background:var(--sunken); margin-top:14px; overflow:hidden}
+.sn-tree-h{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 12px; border-bottom:1px solid var(--line); font-size:13px; color:var(--muted)}
+#snmp-tree-list{max-height:420px; overflow-y:auto}
+.sn-node{display:grid; grid-template-columns:1fr auto auto; gap:14px; align-items:center; width:100%; text-align:left; border:0; border-bottom:1px solid var(--line); background:none; color:var(--text);
+  font:inherit; font-size:13.5px; padding:5px 12px 5px calc(12px + var(--l) * 22px); cursor:pointer}
+.sn-node:last-child{border-bottom:0}
+.sn-node:hover, .sn-node.sel{background:color-mix(in srgb, var(--info) 10%, transparent)}
+.sn-node.sel{box-shadow:inset 3px 0 0 var(--info)}
+.sn-node .nm{font-family:'JetBrains Mono',monospace; font-weight:600; min-width:0}
+.sn-node .nm i{display:inline-block; width:16px; color:var(--faint); font-style:normal}
+.sn-node .ds{font-family:'Instrument Sans',sans-serif; font-weight:400; color:var(--muted); margin-left:10px; font-size:13px}
+.sn-node .oid{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--faint); white-space:nowrap}
+.sn-node .pill{font-size:11px; padding:0 8px}
+.sn-node.grp .nm{color:var(--muted)}
+.sn-node mark{background:none; color:var(--info)}
+.sn-mib{font-size:12px; color:var(--faint); white-space:nowrap}
+.sn-sug{border:1px solid var(--line-strong); border-radius:8px; background:var(--panel); margin-top:6px; box-shadow:var(--shadow); overflow:hidden}
+.sn-more{padding:6px 12px; font-size:13px; color:var(--faint)}
+@media (max-width:900px){ .sn-node{grid-template-columns:1fr auto} .sn-mib{display:none} }
+
+.strip-name{font-size:14px; color:var(--info); font-weight:500; word-break:break-all}
+.row-act{display:flex; gap:6px}
+.row-act button{white-space:nowrap; border:1px solid var(--line); background:none; color:var(--muted); border-radius:6px; padding:2px 9px; font:inherit; font-size:12.5px; cursor:pointer}
+.row-act button:hover{color:var(--text); border-color:var(--line-strong)}
+.saved{display:inline-flex; align-items:center; border:1px solid var(--line); background:var(--raised); border-radius:999px; overflow:hidden}
+.saved .chip{border:0; border-radius:0; background:none; padding-right:8px}
+.saved .chip-x{border:0; border-left:1px solid var(--line); background:none; color:var(--faint); padding:5px 10px; font:inherit; font-size:13px; cursor:pointer}
+.saved .chip-x:hover{color:var(--err)}
+.chip.on{background:var(--ok-soft); color:var(--ok); border-color:color-mix(in srgb, var(--ok) 40%, transparent)}
+.tbl td.dim{color:var(--faint)}
+.brand > div{min-width:0}
+.brand-host{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tbl th, .tbl td.nw{white-space:nowrap}
+.tbl tr.diff td{background:var(--warn-soft)}
+.live-cursor::after{content:'▍'; color:var(--run); animation:blinkc 1s steps(1) infinite}
+@keyframes blinkc{50%{opacity:0}}
+
+/* ───────── Local network ───────── */
+.lan-head{display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px}
+.lan-head .summary{margin:0}
+.lan-head .summary .svc-dot{display:inline-block; margin-right:8px; vertical-align:1px}
+.lan-tools{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+.lan-tools label{font-size:13px; color:var(--muted); display:flex; align-items:center; gap:8px}
+.lan-tools input, .lan-tools select{padding:6px 10px; width:190px}
+.lan-progress{height:4px; background:var(--raised); border-radius:2px; overflow:hidden; margin-bottom:12px}
+.lan-progress i{display:block; height:100%; width:0; background:var(--run); transition:width .2s}
+.lan-list{border:1px solid var(--line); border-radius:10px; overflow:hidden}
+.lan-list:empty{display:none}
+.nb-chips{display:flex; flex-wrap:wrap; gap:2px 0; margin-top:5px}
+.nb-chips .hx-src{margin:2px 4px 2px 0}
+.nb-chips .hx-src.v6{background:var(--raised)}
+.nb-dim{color:var(--faint); font-size:12.5px; align-self:center}
+.nb-row .lan-title .tag{margin-left:8px}
+.nb-detail{padding:4px 14px 12px 68px}
+.nb-detail .tbl td.v{white-space:pre-line}
+.lan-row + .lan-row{border-top:1px solid var(--line)}
+.lan-main{display:grid; grid-template-columns:auto minmax(0,1fr) auto auto; gap:14px; align-items:center; width:100%; padding:10px 14px; background:none; border:0; color:inherit; font:inherit; text-align:left; cursor:pointer}
+.lan-main:hover{background:var(--raised)}
+.lan-ico{position:relative; width:40px; height:40px; border:1px solid var(--line-strong); border-radius:9px; display:grid; place-items:center; color:var(--muted)}
+.lan-ico svg{width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.4; stroke-linecap:round; stroke-linejoin:round}
+.lan-dot{position:absolute; right:-4px; bottom:-4px; width:11px; height:11px; border-radius:50%; background:var(--ok); border:2px solid var(--panel)}
+.lan-txt{min-width:0}
+.lan-title{display:block; font-weight:600; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.lan-title .tag{font-size:11.5px; padding:1px 7px; margin-left:6px; vertical-align:1px; font-weight:500}
+.lan-sub{display:block; font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.lan-svc{font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--ok); white-space:nowrap}
+.lan-chev{color:var(--faint); font-size:18px; line-height:1; transition:transform .15s}
+.lan-main[aria-expanded="true"]{background:var(--raised)}
+.lan-main[aria-expanded="true"] .lan-chev{transform:rotate(90deg)}
+.lan-detail{padding:12px 14px 16px 68px; background:var(--sunken); border-top:1px solid var(--line)}
+.lan-detail .row-act{margin-top:14px}
+
+/* ───────── Password generator ───────── */
+.pw-types{margin-bottom:6px}
+.pw-types td{vertical-align:middle; padding:6px 12px}
+.pw-types .check{padding-bottom:0}
+.pw-types input[type=number]{padding:6px 10px; width:96px}
+.pw-types th:last-child{width:130px}
+.pw-types td.m{color:var(--muted)}
+.field.range{flex:1 1 260px}
+.field.range label{display:flex; align-items:baseline; justify-content:space-between}
+.range-val{font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:var(--text)}
+input[type=range]{width:100%; height:22px; accent-color:var(--focus); cursor:pointer; background:none}
+.seg.seg-pick{margin-bottom:0}
+.seg.seg-pick button[aria-checked="true"]{background:var(--raised); color:var(--text); font-weight:600; box-shadow:0 0 0 1px var(--line-strong)}
+.seg-pick .mono{color:var(--faint); margin-left:6px}
+.pw-foot{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:14px; margin-top:18px; padding-top:16px; border-top:1px solid var(--line)}
+.pw-foot .summary{margin:0}
+.pw-actions{display:flex; gap:10px}
+.btn .count{font-family:'JetBrains Mono',monospace; font-size:12.5px; background:var(--raised); border-radius:999px; padding:0 8px; min-width:24px}
+.pill.info{background:color-mix(in srgb, var(--info) 14%, transparent); color:var(--info)}
+.meter{display:inline-block; width:110px; height:6px; border-radius:3px; background:var(--raised); overflow:hidden; vertical-align:middle; margin:0 4px}
+.meter i{display:block; height:100%; background:currentColor; border-radius:3px}
+.meter.ok{color:var(--ok)} .meter.warn{color:var(--warn)} .meter.err{color:var(--err)} .meter.info{color:var(--info)}
+.pw-list{display:flex; flex-direction:column; gap:8px}
+.pw-row{display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:14px; align-items:center; padding:10px 14px; background:var(--raised); border-radius:8px}
+.pw-n{font-size:13px; color:var(--faint)}
+.pw-val{font-family:'JetBrains Mono',monospace; font-size:16.5px; letter-spacing:.02em; word-break:break-all; user-select:all; -webkit-user-select:all}
+.ch-d{color:var(--info)} .ch-s{color:var(--warn)}
+#pw-hist .tbl td.v{font-size:14px}
+
+/* ───────── Number converter ───────── */
+.nc-opts{align-items:center; gap:10px 24px}
+.nc-opts .check{padding-bottom:0}
+.nc-grid{display:grid; grid-template-columns:170px minmax(0,1fr) auto; gap:12px 14px; align-items:center; margin-top:20px}
+.nc-grid label{font-size:13.5px; font-weight:500; color:var(--muted); line-height:1.3}
+.nc-grid label .hint{display:block; font-size:12px; color:var(--faint); font-weight:400; white-space:nowrap}
+.nc-grid input{font-size:16px; letter-spacing:.02em}
+.nc-grid input[aria-invalid="true"]{border-color:var(--err); box-shadow:0 0 0 3px var(--err-soft)}
+.nc-msg{min-height:22px; margin-top:14px; font-size:13.5px; color:var(--muted)}
+.nc-msg.err{color:var(--err)} .nc-msg.warn{color:var(--warn)}
+.nc-bits{display:grid; grid-template-columns:repeat(var(--cols,4), max-content); gap:12px 18px; justify-content:start}
+.nc-byte{display:flex; flex-direction:column; gap:4px}
+.nc-byte-bits{display:flex; gap:2px}
+.nc-bit{width:22px; height:30px; border:1px solid var(--line); border-radius:5px; background:var(--sunken); color:var(--faint); font:500 14px 'JetBrains Mono',monospace; cursor:pointer; padding:0}
+.nc-bit:hover{border-color:var(--line-strong); color:var(--text)}
+.nc-bit.on{background:color-mix(in srgb, var(--info) 18%, transparent); border-color:color-mix(in srgb, var(--info) 45%, transparent); color:var(--info); font-weight:700}
+.nc-bit:nth-child(4){margin-right:5px}
+.nc-idx{display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--faint); padding:0 2px}
+.nc-head{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:14px}
+.nc-head .panel-title{margin:0}
+.nc-head .summary{margin:0; font-size:13.5px}
+
+/* ───────── UUID generator ───────── */
+.uuid-list{display:flex; flex-direction:column; gap:6px}
+.uuid-list .pw-row{padding:8px 14px}
+.uuid-val{font-family:'JetBrains Mono',monospace; font-size:15.5px; word-break:break-all; user-select:all; -webkit-user-select:all}
+.uuid-name{display:block; font-family:'Instrument Sans',sans-serif; font-size:12.5px; color:var(--muted); user-select:text; -webkit-user-select:text; word-break:break-all}
+.uuid-top{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px}
+.uuid-top .summary{margin:0}
+.uuid-foot{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:14px; margin-top:18px; padding-top:16px; border-top:1px solid var(--line)}
+.uuid-foot .summary{margin:0}
+
+
+/* ───────── Wi-Fi ───────── */
+.wf-form{padding:16px 20px}
+.wf-form .row{align-items:center}
+.wf-inline{flex-direction:row; align-items:center; gap:10px}
+.wf-inline select{padding:7px 10px}
+.wf-form .btn{padding:7px 18px}
+.wf-form .check{padding:0}
+.wf-box{margin-top:16px}
+.wf-note{display:flex; gap:10px; align-items:flex-start; padding:12px 16px; border-radius:10px; background:var(--warn-soft); color:var(--text); font-size:14px; margin-top:16px}
+.wf-note::before{content:'!'; font-weight:700; color:var(--warn)}
+.wf-note .c-dim{display:block; font-size:13px; margin-top:2px}
+.wf-empty{padding:36px 32px; text-align:center}
+.wf-empty svg{width:56px; height:56px; stroke:var(--faint); fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round}
+.wf-empty svg .x{stroke:var(--err)}
+.wf-empty-t{font-size:18px; font-weight:600; margin-top:12px}
+.wf-empty .lede{margin:8px auto 0; max-width:64ch}
+.wf-empty .btn{margin-top:20px}
+.wf-conn{display:grid; grid-template-columns:auto minmax(0,1fr); gap:18px; align-items:center; padding:16px 20px}
+.wf-conn .kv{grid-template-columns:repeat(4,minmax(0,1fr))}
+.wf-conn .kv-item{padding:9px 12px}
+.wf-conn .kv-v{font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; word-break:normal}
+.wf-gauge{width:104px; height:104px; position:relative; text-align:center}
+.wf-gauge svg{width:104px; height:104px}
+.wf-gauge b{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; font:600 22px 'JetBrains Mono',monospace; line-height:1.1}
+.wf-gauge small{display:block; font:500 11.5px 'Instrument Sans',sans-serif; color:var(--muted); margin-top:2px}
+.wf-gauge em{position:absolute; left:0; right:0; bottom:2px; font:600 12px 'Instrument Sans',sans-serif; font-style:normal}
+.wf-tools{display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px}
+.wf-tools .summary{margin:0}
+.wf-chips{display:flex; gap:6px; flex-wrap:wrap}
+.wf-tblwrap{overflow-x:auto; padding:4px 8px}
+.tbl.wf td, .tbl.wf th{padding:8px 10px}
+.wf-bar{display:flex; align-items:center; gap:8px; white-space:nowrap}
+.wf-bars{display:inline-flex; align-items:flex-end; gap:2px; height:14px}
+.wf-bars i{width:4px; background:var(--line-strong); border-radius:1px}
+.wf-bars i:nth-child(1){height:5px} .wf-bars i:nth-child(2){height:8px} .wf-bars i:nth-child(3){height:11px} .wf-bars i:nth-child(4){height:14px}
+.wf-bars.ok i.on{background:var(--ok)} .wf-bars.warn i.on{background:var(--warn)} .wf-bars.err i.on{background:var(--err)}
+.wf-dbm{font-family:'JetBrains Mono',monospace; font-size:13px}
+.tbl .wf-ssid{font-weight:600}
+.tbl .wf-ssid.hid{color:var(--faint); font-style:italic; font-weight:500}
+.tbl .wf-sub{display:block; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--faint)}
+.tbl .wf-hint{display:block; font-size:12px; color:var(--info); margin-top:1px}
+.tbl .pill.sm{font-size:11px; padding:0 8px}
+.tbl tr.me td{background:color-mix(in srgb, var(--info) 9%, transparent)}
+.tbl tr.me td:first-child{box-shadow:inset 3px 0 0 var(--info)}
+.tbl tr.wf-grp td{background:var(--raised); font-weight:600; font-size:13px; color:var(--muted); padding:6px 10px}
+.wf-k{display:inline-flex; gap:3px}
+.wf-k .tag{font-size:11px; padding:1px 6px}
+.wf-k .tag.off{opacity:.3}
+.tag.sm{font-size:11px; padding:1px 6px}
+.wf-chart{background:var(--sunken); border:1px solid var(--line); border-radius:10px; padding:12px 12px 6px}
+.wf-chart + .wf-chart{margin-top:14px}
+.wf-chart-h{display:flex; justify-content:space-between; align-items:baseline; margin:0 4px 6px; gap:12px; flex-wrap:wrap}
+.wf-chart-h b{font-size:14px}
+.wf-chart-h span{font-size:13px; color:var(--muted)}
+.wf-chart svg{display:block; width:100%; height:auto; font-family:'JetBrains Mono',monospace}
+.wf-legend{display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); margin:10px 4px 0}
+.wf-legend i{display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-2px; margin-right:6px}
+.wf-mon-form{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px}
+.wf-mon-form .row{align-items:center; gap:10px}
+.wf-mon-form select{width:110px; padding:6px 10px}
+.wf-mon-form .btn{padding:7px 18px}
+.wf-live{display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--run)}
+.wf-live::before{content:''; width:8px; height:8px; border-radius:50%; background:var(--err); box-shadow:0 0 0 3px var(--err-soft)}
+.wf-live.done{color:var(--muted)} .wf-live.done::before{background:var(--faint); box-shadow:none}
+.wf-mon .kv{grid-template-columns:repeat(6,minmax(0,1fr)); margin-bottom:14px}
+.wf-mon .kv-v{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; word-break:normal}
+.wf-events{margin-top:14px; padding:4px 8px}
+
+/* ───────── Responsive ───────── */
+@media (max-width: 900px){
+  body{grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto minmax(0,1fr)}
+  .sidebar{border-right:0; border-bottom:1px solid var(--line); overflow:visible; min-width:0}
+  nav{min-width:0}
+  .brand{padding:14px 16px}
+  nav{display:flex; overflow-x:auto; gap:4px; padding:8px 12px}
+  .nav-group{display:contents}
+  .nav-group-title{display:none}
+  .nav-item{white-space:nowrap; width:auto; flex-shrink:0}
+  .nav-item[aria-current="page"]::before{left:8px; right:8px; top:auto; bottom:-8px; width:auto; height:3px; border-radius:3px 3px 0 0}
+  .view{padding:24px 16px 48px}
+  h1{font-size:24px}
+  .w-host,.w-md,.w-sm{width:100%}
+  .check-line{grid-template-columns:1fr auto}
+  .check-line .detail{grid-column:1 / -1}
+  .strip-time{margin-left:0}
+  .pw-row{grid-template-columns:minmax(0,1fr)}
+  .lan-detail{padding-left:14px}
+  .lan-svc{display:none}
+  .pw-n{display:none}
+  .nc-grid{grid-template-columns:minmax(0,1fr) auto}
+  .nc-grid label{grid-column:1 / -1}
+  .nc-bits{grid-template-columns:repeat(auto-fill, max-content)}
+  .wf-conn{grid-template-columns:minmax(0,1fr); justify-items:center}
+  .wf-conn > div:last-child{width:100%}
+  .wf-conn .kv, .wf-mon .kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width: 900px){ .side-credits{display:none} }
+@media (max-width: 760px){ .np-node{max-width:150px; min-width:90px} }
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important; transition:none!important}
+}
+</style>
+</head>
+<body class="desktop">
+
+<header class="topbar" data-tauri-drag-region>
+  <div class="brand" data-tauri-drag-region>
+    <img src="logo.png" alt="" id="brand-logo" data-tauri-drag-region draggable="false">
+    <div class="brand-name" data-tauri-drag-region>Network Toolbox</div>
+  </div>
+  <div class="top-drag" data-tauri-drag-region></div>
+  <div class="top-actions" data-tauri-drag-region>
+    <button class="top-btn" id="lang-btn" type="button"><span id="lang-ico"></span></button>
+    <button class="top-btn" id="theme-btn" type="button"><svg viewBox="0 0 20 20" id="theme-ico"></svg><span id="theme-txt">Tema chiaro</span></button>
+    <button class="top-btn" id="home-btn" type="button" aria-label="Schermata iniziale"><svg viewBox="0 0 20 20"><path d="M3 9.5L10 3.5l7 6"/><path d="M5 8v8.5h3.8v-5h2.4v5H15V8"/></svg>Home</button>
+    <span class="top-btn svc checking" id="svc" role="status"><span class="svc-dot"></span><span id="svc-txt" class="sr-only">Controllo della connessione</span></span>
+  </div>
+  <div class="win-ctl hidden" id="win-ctl">
+    <button type="button" id="win-min" aria-label="Riduci a icona" title="Riduci a icona"><svg viewBox="0 0 10 10"><path d="M0 5.5h10"/></svg></button>
+    <button type="button" id="win-max" aria-label="Ingrandisci" title="Ingrandisci"><svg viewBox="0 0 10 10" id="win-max-ico"><rect x=".5" y=".5" width="9" height="9"/></svg></button>
+    <button type="button" id="win-close" aria-label="Chiudi" title="Chiudi"><svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10"/></svg></button>
+  </div>
+</header>
+
+<aside class="sidebar">
+
+  <nav aria-label="Strumenti">
+    <div class="nav-group">
+      <div class="nav-group-title">Diagnostica</div>
+      <button class="nav-item" data-view="ping" ><svg class="ni" viewBox="0 0 20 20"><circle cx="10" cy="10" r="2"/><path d="M5.5 14.5a6.4 6.4 0 010-9M14.5 5.5a6.4 6.4 0 010 9M3 17a9.9 9.9 0 010-14M17 3a9.9 9.9 0 010 14"/></svg>Ping</button>
+      <button class="nav-item" data-view="trace"><svg class="ni" viewBox="0 0 20 20"><circle cx="4" cy="16" r="1.8"/><circle cx="16" cy="4" r="1.8"/><path d="M5.6 15.2C9 14 6.5 10.5 10 9.5s1.5-4 4.4-4.8"/></svg>Traceroute</button>
+      <button class="nav-item" data-view="sweep"><svg class="ni" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="4"/><path d="M10 10l5.3-5.3"/><circle cx="13.5" cy="7.5" r=".6" fill="currentColor"/></svg>Scansione subnet</button>
+      <button class="nav-item" data-view="lan"><svg class="ni" viewBox="0 0 20 20"><rect x="7.5" y="2.5" width="5" height="4" rx="1"/><rect x="2" y="13.5" width="4.5" height="4" rx="1"/><rect x="7.75" y="13.5" width="4.5" height="4" rx="1"/><rect x="13.5" y="13.5" width="4.5" height="4" rx="1"/><path d="M10 6.5v7M4.25 13.5V10h11.5v3.5"/></svg>Rete locale</button>
+      <button class="nav-item" data-view="wifi"><svg class="ni" viewBox="0 0 20 20"><path d="M2.5 8a10.6 10.6 0 0115 0M5 10.8a7 7 0 0110 0M7.4 13.5a3.6 3.6 0 015.2 0"/><circle cx="10" cy="16.2" r=".9" fill="currentColor"/></svg>Wi-Fi</button>
+      <button class="nav-item" data-view="dns"><svg class="ni" viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M2.5 8h15M7.5 8v8"/></svg>DNS</button>
+      <button class="nav-item" data-view="portscan"><svg class="ni" viewBox="0 0 20 20"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="12" y="3" width="5" height="5" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="12" y="12" width="5" height="5" rx="1"/></svg>Porte TCP</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">Informazioni</div>
+      <button class="nav-item" data-view="whois"><svg class="ni" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.2 2.4 2.2 12.6 0 15M10 2.5c-2.2 2.4-2.2 12.6 0 15"/></svg>Whois e posizione</button>
+      <button class="nav-item" data-view="blacklist"><svg class="ni" viewBox="0 0 20 20"><path d="M10 2.5l6 2.5v4.5c0 4-2.6 6.8-6 8-3.4-1.2-6-4-6-8V5z"/><path d="M7.5 7.5l5 5M12.5 7.5l-5 5"/></svg>Blacklist</button>
+      <button class="nav-item" data-view="myip"><svg class="ni" viewBox="0 0 20 20"><path d="M10 2.5a5.5 5.5 0 00-5.5 5.5c0 4.2 5.5 9.5 5.5 9.5s5.5-5.3 5.5-9.5A5.5 5.5 0 0010 2.5z"/><circle cx="10" cy="8" r="2"/></svg>IP pubblico</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">Analisi</div>
+      <button class="nav-item" data-view="subnet"><svg class="ni" viewBox="0 0 20 20"><rect x="7.5" y="2.5" width="5" height="4" rx="1"/><rect x="2" y="13.5" width="5" height="4" rx="1"/><rect x="13" y="13.5" width="5" height="4" rx="1"/><path d="M10 6.5V10M4.5 13.5V10h11v3.5"/></svg>Subnet</button>
+      <button class="nav-item" data-view="headers"><svg class="ni" viewBox="0 0 20 20"><path d="M3 5h14M3 10h10M3 15h7"/></svg>Header HTTP</button>
+      <button class="nav-item" data-view="ssl"><svg class="ni" viewBox="0 0 20 20"><rect x="4" y="9" width="12" height="8.5" rx="1.5"/><path d="M6.5 9V6.5a3.5 3.5 0 017 0V9"/></svg>Certificati TLS</button>
+      <button class="nav-item" data-view="email"><svg class="ni" viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M3 5.5l7 5.5 7-5.5"/></svg>Email</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">Protocolli</div>
+      <button class="nav-item" data-view="smtp"><svg class="ni" viewBox="0 0 20 20"><rect x="2.5" y="5" width="11" height="9" rx="1.5"/><path d="M3 5.8l5 3.8 5-3.8M14.5 12.5h3.5M16.3 10.7l1.7 1.8-1.7 1.8"/></svg>Server SMTP</button>
+      <button class="nav-item" data-view="snmp"><svg class="ni" viewBox="0 0 20 20"><rect x="2.5" y="11" width="15" height="6" rx="1.5"/><path d="M6 14h.01M9 14h.01M10 11V7M7 5a4.2 4.2 0 016 0M5 3a7 7 0 0110 0"/></svg>SNMP</button>
+      <button class="nav-item" data-view="ntp"><svg class="ni" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2"/></svg>NTP</button>
+      <button class="nav-item" data-view="wol"><svg class="ni" viewBox="0 0 20 20"><path d="M10 2.5v7"/><path d="M6 5a6.5 6.5 0 108 0"/></svg>Wake-on-LAN</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">Utilità</div>
+      <button class="nav-item" data-view="pwgen"><svg class="ni" viewBox="0 0 20 20"><circle cx="6.5" cy="13.5" r="3.5"/><path d="M9 11l7.5-7.5M13.5 6.5l2 2M11.5 8.5l1.5 1.5"/></svg>Generatore password</button>
+      <button class="nav-item" data-view="numconv"><svg class="ni" viewBox="0 0 20 20"><path d="M3.5 7h12.5M13 4l3 3-3 3M16.5 13H4M7 10l-3 3 3 3"/></svg>Convertitore numerico</button>
+      <button class="nav-item" data-view="uuid"><svg class="ni" viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M5.5 8.5h2.5M10 8.5h4.5M5.5 11.5h5M12.5 11.5h2"/></svg>Generatore UUID</button>
+    </div>
+  </nav>
+
+  <div class="side-credits">
+    <div>Versione <span id="home-version">2.0.0</span></div>
+    <div>© 2026 Giorgio Casciola</div>
+    <div>Licenza Apache 2.0</div>
+  </div>
+</aside>
+
+<main>
+
+<!-- HOME -->
+<section class="view active" id="view-home">
+    <div class="home-bg" aria-hidden="true"></div>
+    <div class="np home-card" id="np" aria-label="Percorso di rete di questo PC">
+      <button type="button" class="np-node" id="np-pc"><span class="np-ico" id="np-pc-ico"></span><span class="np-name" id="np-pc-name">questo PC</span><span class="np-ip" id="np-pc-ip">—</span></button>
+      <div class="np-link" id="np-l1"><i></i><span id="np-l1-ms">—</span><i></i></div>
+      <button type="button" class="np-node" id="np-gw"><span class="np-ico"><svg viewBox="0 0 24 24"><rect x="3" y="13" width="18" height="6.5" rx="2"/><path d="M7 16.25h.01M10 16.25h.01"/><path d="M8.5 9.5a5 5 0 017 0M5.8 6.8a8.8 8.8 0 0112.4 0"/></svg></span><span class="np-name" id="np-gw-name">gateway</span><span class="np-ip" id="np-gw-ip">—</span></button>
+      <div class="np-link" id="np-l2"><i></i><span id="np-l2-ms">—</span><i></i></div>
+      <button type="button" class="np-node" id="np-net"><span class="np-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18"/></svg></span><span class="np-name" id="np-net-name">Internet</span><span class="np-ip" id="np-net-ip">—</span></button>
+    </div>
+    <div class="home-map" aria-hidden="true"></div>
+    <div class="home-foot">
+    <div class="home-card clock-card">
+      <time class="clock-time" id="clock-time">--:--:--</time>
+      <div class="clock-date" id="clock-date"></div>
+    </div>
+    </div>
+</section>
+
+<!-- PING -->
+<section class="view" id="view-ping">
+  <header class="view-head">
+    <h1>Ping</h1>
+    <p class="lede">Verifica se un host risponde e con quali tempi, partendo da questo PC.</p>
+  </header>
+  <form class="panel" data-submit="ping" data-stop="ping_stop">
+    <div class="row">
+      <div class="field"><label for="ping-host">Host o indirizzo IP</label><input type="text" id="ping-host" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="ping-count">Pacchetti</label><input type="number" id="ping-count" class="w-xs" value="4" min="1" max="100"></div>
+      <div class="field"><label for="ping-interval">Intervallo (ms)</label><input type="number" id="ping-interval" class="w-sm" value="1000" min="100" max="2000" step="100"></div>
+      <div class="field"><label for="ping-timeout">Timeout (ms)</label><input type="number" id="ping-timeout" class="w-sm" value="2000" min="100" max="5000" step="100"></div>
+      <button class="btn" type="submit">Esegui ping</button>
+    </div>
+    <div class="opts">
+      <label class="check"><input type="checkbox" id="opt-resolve" checked> Risolvi i nomi degli host</label>
+      <label class="check"><input type="checkbox" id="opt-live" checked> Mostra le righe man mano che arrivano</label>
+    </div>
+  </form>
+  <div class="results" id="res-ping"></div>
+</section>
+
+<!-- TRACEROUTE -->
+<section class="view" id="view-trace">
+  <header class="view-head">
+    <h1>Traceroute</h1>
+    <p class="lede">Mostra il percorso che seguono i pacchetti da questo PC fino all'host, salto per salto.</p>
+  </header>
+  <form class="panel" data-submit="traceroute" data-stop="traceroute_stop">
+    <div class="row">
+      <div class="field"><label for="trace-host">Host o indirizzo IP</label><input type="text" id="trace-host" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="trace-hops">Hop massimi</label><input type="number" id="trace-hops" class="w-xs" value="30" min="1" max="64"></div>
+      <div class="field"><label for="trace-timeout">Timeout per hop (ms)</label><input type="number" id="trace-timeout" class="w-sm" value="2000" min="100" max="5000" step="100"></div>
+      <button class="btn" type="submit">Esegui traceroute</button>
+    </div>
+    <div class="opts">
+      <label class="check"><input type="checkbox" id="trace-resolve" checked> Risolvi i nomi degli host</label>
+      <label class="check"><input type="checkbox" id="trace-live" checked> Mostra le righe man mano che arrivano</label>
+    </div>
+  </form>
+  <div class="results" id="res-trace"></div>
+</section>
+
+<!-- SWEEP -->
+<section class="view" id="view-sweep">
+  <header class="view-head">
+    <h1>Scansione subnet</h1>
+    <p class="lede">Trova gli host accesi in una rete fino a /24, con nome e MAC. Sulle reti remote le workstation Windows spesso non rispondono al ping: per trovarle attiva la verifica sulle porte TCP.</p>
+  </header>
+  <form class="panel" data-submit="sweep" data-stop="sweep_stop">
+    <div class="row">
+      <div class="field"><label for="sweep-cidr">Rete (fino a /24)</label><input type="text" id="sweep-cidr" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit">Scansiona rete</button>
+    </div>
+    <div class="opts">
+      <label class="check"><input type="checkbox" id="sweep-tcp"> Verifica anche le porte TCP 445, 3389, 135, 22, 80, 443 sugli host che non rispondono al ping</label>
+    </div>
+    <p class="note">MAC e rilevamento via ARP funzionano sulle reti a cui questo PC è collegato direttamente: lì vengono trovati anche gli host che bloccano il ping. Una /24 richiede da 5 a 20 secondi.</p>
+  </form>
+  <div class="results" id="res-sweep"></div>
+</section>
+
+<!-- LOCAL NETWORK -->
+<section class="view" id="view-lan">
+  <header class="view-head">
+    <h1>Rete locale</h1>
+    <p class="lede">Inventario degli host di una rete fino a /21: nome, produttore della scheda di rete, modello letto via SNMP e, se vuoi, i servizi in ascolto. Clicca un host per i dettagli. La scheda Vicini legge invece le tabelle ARP e NDP di questo PC.</p>
+  </header>
+  <div class="seg dx-seg" role="tablist" data-tabs="lan">
+    <button type="button" role="tab" data-tab="scan" aria-selected="true">Scansione della rete</button>
+    <button type="button" role="tab" data-tab="neigh" aria-selected="false">Vicini (ARP e NDP)</button>
+  </div>
+  <div data-pane="lan-scan">
+  <form class="panel" data-submit="lan" data-stop="lan_stop">
+    <div class="row">
+      <div class="field"><label for="lan-cidr">Rete (vuoto = rete di questo PC, fino a /21)</label><input type="text" id="lan-cidr" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit" id="lan-btn">Scansiona</button>
+    </div>
+    <div class="opts">
+      <label class="check"><input type="checkbox" id="lan-svc"> Controlla i servizi: 21 porte TCP per host, e ricerca via TCP degli host che non rispondono al ping</label>
+    </div>
+    <p class="note" id="lan-net"></p>
+    <p class="note">Nome, produttore (registro IEEE dei prefissi MAC) e SNMP con community public non richiedono opzioni. MAC e produttore si leggono solo sulle reti collegate direttamente a questo PC. Il controllo dei servizi è una scansione di porte: l'EDR potrebbe segnalarla.</p>
+  </form>
+  <div class="results" id="res-lan"></div>
+  </div>
+  <div data-pane="lan-neigh" class="hidden">
+  <form class="panel" data-submit="neigh">
+    <div class="row">
+      <button class="btn" type="submit" id="neigh-btn">Aggiorna</button>
+    </div>
+    <div class="opts">
+      <label class="check"><input type="checkbox" id="neigh-probe"> Cerca anche gli host IPv6: un solo echo a ff02::1 (tutti i nodi del collegamento) su ogni scheda con IPv6</label>
+    </div>
+    <p class="note">Legge la tabella dei vicini di questo PC, ARP per IPv4 e NDP per IPv6, e unisce gli indirizzi per MAC. Non invia nulla: compaiono gli host che hanno parlato di recente con il PC, e Windows dimentica i vicini dopo qualche minuto. Ogni aggiornamento viene confrontato con il precedente (stesso IP con MAC diverso, gateway o router IPv6 cambiati). Il confronto vale finché l'app resta aperta.</p>
+  </form>
+  <div class="results" id="res-neigh"></div>
+  </div>
+</section>
+
+<!-- WI-FI -->
+<section class="view" id="view-wifi">
+  <header class="view-head">
+    <h1>Wi-Fi</h1>
+    <p class="lede">Reti vicine, access point a cui è collegato questo PC, occupazione dei canali e andamento del segnale.</p>
+  </header>
+  <form class="panel wf-form" data-submit="wifi" id="wf-form">
+    <div class="row">
+      <div class="field wf-inline"><label for="wifi-if">Scheda</label><select id="wifi-if" class="w-host"></select></div>
+      <button class="btn" type="submit" id="wifi-btn">Scansiona</button>
+      <label class="check"><input type="checkbox" id="wifi-auto"> Ripeti ogni 10 s</label>
+      <label class="check"><input type="checkbox" id="wifi-group"> Raggruppa per rete</label>
+    </div>
+  </form>
+  <div id="wf-msg"></div>
+  <div class="panel wf-conn wf-box hidden" id="wf-conn"></div>
+  <div class="results hidden" id="wf-tabs" style="margin-top:22px">
+    <div class="seg" role="tablist" data-tabs="wifi">
+      <button type="button" role="tab" data-tab="nets" aria-selected="true">Reti vicine <span class="mono c-dim" id="wf-count"></span></button>
+      <button type="button" role="tab" data-tab="chan" aria-selected="false">Canali</button>
+      <button type="button" role="tab" data-tab="mon" aria-selected="false">Monitor segnale</button>
+    </div>
+    <div data-pane="wifi-nets" id="wf-nets"></div>
+    <div data-pane="wifi-chan" id="wf-chan" class="hidden"></div>
+    <div data-pane="wifi-mon" class="hidden wf-mon">
+      <form class="wf-mon-form" data-submit="wifimon" data-stop="wifi_monitor_stop">
+        <div class="row">
+          <div class="field wf-inline"><label for="wfm-int">Campione ogni</label>
+            <select id="wfm-int"><option value="500">0,5 s</option><option value="1000" selected>1 s</option><option value="2000">2 s</option><option value="5000">5 s</option></select></div>
+          <button class="btn" type="submit" id="wfm-btn">Avvia</button>
+          <span class="wf-live hidden" id="wfm-live"></span>
+        </div>
+        <div class="wf-chips"><button class="chip" type="button" id="wfm-csv">Copia CSV</button></div>
+      </form>
+      <div id="wfm-body"><div class="empty">Avvia il monitor e cammina con il portatile nelle zone da verificare: il grafico mostra dove il segnale scende e quando la scheda cambia access point.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DNS -->
+<section class="view" id="view-dns">
+  <header class="view-head">
+    <h1>DNS</h1>
+    <p class="lede">Interroga i record di un dominio con il DNS di questo PC o con i server che indichi, oppure analizza un dominio intero: record, delega, DNSSEC. Per il PTR basta inserire l'indirizzo IP; i nomi brevi vengono completati con il dominio del PC.</p>
+  </header>
+  <form class="panel" data-submit="dns">
+    <div class="seg dx-seg" role="tablist" data-tabs="dns">
+      <button type="button" role="tab" data-tab="compare" aria-selected="true">Confronto tra server</button>
+      <button type="button" role="tab" data-tab="domain" aria-selected="false">Analisi del dominio</button>
+    </div>
+    <div data-pane="dns-compare">
+      <div class="row">
+        <div class="field grow"><label for="dns-host">Dominio, hostname o IP</label><input type="text" id="dns-host" autocomplete="off" spellcheck="false"></div>
+        <div class="field"><label for="dns-type">Record</label>
+          <select id="dns-type" class="w-sm"><option>A</option><option>AAAA</option><option>MX</option><option>TXT</option><option>NS</option><option>CNAME</option><option>SOA</option><option>PTR</option><option>SRV</option><option>CAA</option><option>HTTPS</option><option>SVCB</option><option>TLSA</option><option>DNSKEY</option><option>DS</option><option>NAPTR</option><option>SSHFP</option><option value="DMARC">DMARC</option></select></div>
+        <button class="btn" type="submit">Risolvi</button>
+      </div>
+      <div class="row">
+        <div class="field grow"><label for="dns-servers">Server DNS da interrogare, separati da virgola (vuoto = DNS di questo PC)</label>
+          <input type="text" id="dns-servers" autocomplete="off" spellcheck="false"></div>
+        <label class="check"><input type="checkbox" id="dns-system" checked> Includi il DNS di questo PC</label>
+      </div>
+      <div class="presets" id="dns-presets"><span class="presets-lbl">Aggiungi</span></div>
+    </div>
+    <div class="hidden" data-pane="dns-domain">
+      <div class="row">
+        <div class="field grow"><label for="dnsd-domain">Dominio</label><input type="text" id="dnsd-domain" autocomplete="off" spellcheck="false"></div>
+        <button class="btn" type="submit">Analizza</button>
+      </div>
+      <div class="opts">
+        <label class="check"><input type="checkbox" id="dnsd-axfr"> Prova anche il trasferimento di zona (AXFR) su ogni name server</label>
+      </div>
+      <p class="note">Interroga il DNS di questo PC, un resolver pubblico che valida DNSSEC (1.1.1.1, poi 9.9.9.9) e, direttamente, i name server del dominio e della zona padre.</p>
+    </div>
+  </form>
+  <div class="results" id="res-dns"></div>
+</section>
+
+<!-- PORTSCAN -->
+<section class="view" id="view-portscan">
+  <header class="view-head">
+    <h1>Porte TCP</h1>
+    <p class="lede">Controlla quali porte accettano connessioni e legge il banner del servizio. Fino a 1024 porte, anche come intervalli (8000-8100).</p>
+  </header>
+  <form class="panel" data-submit="portscan" data-stop="portscan_stop">
+    <div class="row">
+      <div class="field"><label for="scan-host">Host o indirizzo IP</label><input type="text" id="scan-host" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <div class="field grow"><label for="scan-ports">Porte, separate da virgola (vuoto = porte comuni)</label><input type="text" id="scan-ports" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit">Scansiona</button>
+    </div>
+    <div class="presets" id="scan-presets"><span class="presets-lbl">Set pronti</span></div>
+  </form>
+  <div class="results" id="res-portscan"></div>
+</section>
+
+<!-- WHOIS -->
+<section class="view" id="view-whois">
+  <header class="view-head">
+    <h1>Whois e posizione</h1>
+    <p class="lede">Dati di registrazione di un dominio o di un IP, interrogando direttamente il registro competente (RIPE, ARIN, nic.it…).</p>
+  </header>
+  <form class="panel" data-submit="whois">
+    <div class="row">
+      <div class="field grow"><label for="whois-host">Dominio o indirizzo IP</label><input type="text" id="whois-host" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit">Cerca</button>
+    </div>
+  </form>
+  <div class="results" id="res-whois"></div>
+</section>
+
+<!-- BLACKLIST -->
+<section class="view" id="view-blacklist">
+  <header class="view-head">
+    <h1>Blacklist</h1>
+    <p class="lede">Controlla se un IP pubblico, o il server di posta di un dominio, compare nelle principali liste antispam (DNSBL).</p>
+  </header>
+  <form class="panel" data-submit="blacklist">
+    <div class="row">
+      <div class="field grow"><label for="bl-host">IP pubblico o hostname</label><input type="text" id="bl-host" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit">Controlla</button>
+    </div>
+    <p class="note">Spamhaus rifiuta le query che arrivano da DNS pubblici come 8.8.8.8 o 1.1.1.1: se compare "query rifiutata", il DNS di questo PC inoltra a uno di questi.</p>
+  </form>
+  <div class="results" id="res-blacklist"></div>
+</section>
+
+<!-- MYIP -->
+<section class="view" id="view-myip">
+  <header class="view-head">
+    <h1>IP pubblico</h1>
+    <p class="lede">L'indirizzo con cui questo PC esce su Internet e il provider che lo annuncia.</p>
+  </header>
+  <form class="panel" data-submit="myip">
+    <button class="btn" type="submit">Rileva IP pubblico</button>
+  </form>
+  <div class="results" id="res-myip"></div>
+</section>
+
+<!-- SUBNET -->
+<section class="view" id="view-subnet">
+  <header class="view-head">
+    <h1>Subnet</h1>
+    <p class="lede">Calcola rete, broadcast, range degli host e suddivisione di una rete IPv4.</p>
+  </header>
+  <form class="panel" data-submit="subnet">
+    <div class="row">
+      <div class="field"><label for="subnet-cidr">Rete in notazione CIDR</label><input type="text" id="subnet-cidr" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit">Calcola</button>
+    </div>
+  </form>
+  <div class="results" id="res-subnet"></div>
+</section>
+
+<!-- HEADERS -->
+<section class="view" id="view-headers">
+  <header class="view-head">
+    <h1>Header HTTP</h1>
+    <p class="lede">Analizza la risposta di un sito: redirect, HSTS, header di sicurezza, Content-Security-Policy e cookie.</p>
+  </header>
+  <form class="panel" data-submit="headers">
+    <div class="row">
+      <div class="field grow"><label for="hdr-url">Indirizzo web</label><input type="text" id="hdr-url" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit">Analizza</button>
+    </div>
+  </form>
+  <div class="results" id="res-headers"></div>
+</section>
+
+<!-- SSL -->
+<section class="view" id="view-ssl">
+  <header class="view-head">
+    <h1>Certificati TLS</h1>
+    <p class="lede">Certificato, catena, revoca e, a richiesta, versioni e cipher accettate dal server. Anche su SMTP, IMAP, POP3 e RDP.</p>
+  </header>
+  <form class="panel" data-submit="ssl" data-stop="ssl_stop">
+    <div class="row">
+      <div class="field grow"><label for="ssl-host">Hostname</label><input type="text" id="ssl-host" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="ssl-port">Porta</label><input type="number" id="ssl-port" class="w-xs" value="443"></div>
+      <div class="field"><label for="ssl-proto">Protocollo</label>
+        <select id="ssl-proto" class="w-md"><option value="auto">Automatico (dalla porta)</option><option value="tls">TLS diretto</option><option value="smtp">SMTP con STARTTLS</option><option value="imap">IMAP con STARTTLS</option><option value="pop3">POP3 con STLS</option><option value="rdp">RDP</option></select></div>
+      <button class="btn" type="submit">Controlla</button>
+    </div>
+    <div class="row">
+      <div class="field"><label for="ssl-sni">Nome SNI (vuoto = hostname)</label><input type="text" id="ssl-sni" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <label class="check"><input type="checkbox" id="ssl-scan"> Prova versioni e cipher accettate dal server (decine di connessioni)</label>
+    </div>
+  </form>
+  <div class="results" id="res-ssl"></div>
+</section>
+
+<!-- EMAIL -->
+<section class="view" id="view-email">
+  <header class="view-head">
+    <h1>Email</h1>
+    <p class="lede">Valuta SPF, DMARC, DKIM, MX e MTA-STS di un dominio, oppure ricostruisci percorso, autenticazione e ritardi di un messaggio dai suoi header.</p>
+  </header>
+  <form class="panel" data-submit="email">
+    <div class="panel-title">Record DNS del dominio</div>
+    <div class="row">
+      <div class="field grow"><label for="email-domain">Dominio</label><input type="text" id="email-domain" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit">Verifica dominio</button>
+    </div>
+    <div class="row">
+      <div class="field"><label for="email-sel">Selettore DKIM (vuoto = quelli più comuni)</label><input type="text" id="email-sel" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="email-ip">IP da verificare con SPF (facoltativo)</label><input type="text" id="email-ip" class="w-host" autocomplete="off" spellcheck="false"></div>
+    </div>
+  </form>
+  <form class="panel" data-submit="emailraw">
+    <div class="panel-title">Header di un messaggio</div>
+    <div class="field"><label for="email-raw">Incolla gli header completi (in Outlook: File › Proprietà › Intestazioni Internet)</label>
+      <textarea id="email-raw" rows="7" spellcheck="false"></textarea></div>
+    <div class="row"><button class="btn" type="submit" style="margin-top:14px">Analizza header</button></div>
+  </form>
+  <div class="results" id="res-email"></div>
+</section>
+
+<!-- SMTP SERVER -->
+<section class="view" id="view-smtp">
+  <header class="view-head">
+    <h1>Server SMTP</h1>
+    <p class="lede">Banner, reverse DNS, estensioni EHLO, TLS e certificato di un server di posta, con la trascrizione della sessione. Volendo: test di open relay, login e invio di un messaggio di prova.</p>
+  </header>
+  <form class="panel" data-submit="smtp">
+    <div class="row">
+      <div class="field"><label for="smtp-host">Server (nome o indirizzo IP)</label><input type="text" id="smtp-host" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="smtp-port">Porta</label><input type="number" id="smtp-port" class="w-xs" value="25" min="1" max="65535"></div>
+      <div class="field"><label for="smtp-sec">Cifratura</label><select id="smtp-sec" class="w-md" title="Automatica: TLS implicito sulla 465, STARTTLS se offerto sulle altre porte">
+        <option value="auto">Automatica</option>
+        <option value="starttls">STARTTLS obbligatorio</option>
+        <option value="implicit">TLS implicito</option>
+        <option value="none">Nessuna (in chiaro)</option></select></div>
+      <button class="btn" type="submit" id="smtp-btn">Avvia test</button>
+      <button class="btn secondary" type="button" id="smtp-clear">Pulisci</button>
+    </div>
+    <div class="row">
+      <div class="field"><label for="smtp-ehlo">Nome EHLO (vuoto = nome di questo PC)</label><input type="text" id="smtp-ehlo" class="w-host" autocomplete="off" spellcheck="false"></div>
+    </div>
+    <div class="presets" id="smtp-presets"><span class="presets-lbl">Porte</span></div>
+    <div class="opts">
+      <label class="check"><input type="checkbox" id="smtp-relay"> Prova open relay</label>
+      <label class="check"><input type="checkbox" id="smtp-auth"> Autenticazione</label>
+      <label class="check"><input type="checkbox" id="smtp-send"> Invia un messaggio di prova</label>
+    </div>
+    <div class="row hidden" id="smtp-auth-row" style="margin-top:16px">
+      <div class="field"><label for="smtp-user">Utente</label><input type="text" id="smtp-user" class="w-host" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="smtp-pass">Password</label><input type="password" id="smtp-pass" class="w-md" autocomplete="off"></div>
+    </div>
+    <div class="hidden" id="smtp-send-box" style="margin-top:16px">
+      <div class="row">
+        <div class="field grow"><label for="smtp-from">Mittente (From)</label><input type="text" id="smtp-from" autocomplete="off" spellcheck="false"></div>
+        <div class="field grow"><label for="smtp-to">Destinatari (To, separati da virgola, massimo 10)</label><input type="text" id="smtp-to" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="row">
+        <div class="field grow"><label for="smtp-subject">Oggetto</label><input type="text" id="smtp-subject" value="Test SMTP" autocomplete="off"></div>
+      </div>
+      <div class="row">
+        <div class="field grow"><label for="smtp-body">Corpo del messaggio (vuoto = testo di prova con nome del PC e ora)</label><textarea id="smtp-body" rows="4" spellcheck="false"></textarea></div>
+      </div>
+    </div>
+    <p class="note">Il test di open relay manda MAIL FROM e RCPT TO verso domini di prova riservati (example.com, example.net) e si ferma lì: nessun messaggio viene inviato. Sui server di terzi è comunque una sonda, che il server o l'EDR possono segnalare. Cifratura automatica: TLS implicito sulla 465, STARTTLS se offerto sulle altre porte. La password si invia solo su TLS con certificato verificato: indica il server con il nome presente nel certificato, non con l'IP.</p>
+  </form>
+  <div class="results" id="res-smtp"></div>
+</section>
+
+<!-- SNMP -->
+<section class="view" id="view-snmp">
+  <header class="view-head">
+    <h1>SNMP</h1>
+    <p class="lede">Leggi un apparato intero (sistema, interfacce, vicini, tabella MAC) oppure un valore, un ramo o una tabella qualsiasi da switch, firewall, server e stampanti. Sola lettura.</p>
+  </header>
+  <form class="panel" data-submit="snmp" data-stop="snmp_stop">
+    <div class="presets sn-prof" id="snmp-profiles"><span class="presets-lbl">Profili</span><button type="button" class="chip" id="snmp-prof-save">+ Salva profilo</button></div>
+    <div class="seg" role="tablist" data-tabs="snmp">
+      <button type="button" role="tab" data-tab="v2c" aria-selected="true">v1 / v2c</button>
+      <button type="button" role="tab" data-tab="v3" aria-selected="false">v3</button>
+    </div>
+    <div class="row">
+      <div class="field"><label for="snmp-host">Host o indirizzo IP</label><input type="text" id="snmp-host" class="w-md" autocomplete="off" spellcheck="false"></div>
+      <div class="field" data-pane="snmp-v2c"><label for="snmp-ver">Versione</label><select id="snmp-ver" class="w-xs"><option value="1">v1</option><option value="2c" selected>v2c</option></select></div>
+      <div class="field" data-pane="snmp-v2c"><label for="snmp-comm">Community</label><input type="password" id="snmp-comm" class="w-sm" value="public" autocomplete="off"></div>
+      <div class="field hidden" data-pane="snmp-v3"><label for="snmp-user">Utente</label><input type="text" id="snmp-user" class="w-sm" autocomplete="off" data-nofocus></div>
+      <div class="field hidden" data-pane="snmp-v3"><label for="snmp-seclevel">Sicurezza</label><select id="snmp-seclevel"><option value="noAuthNoPriv">Nessuna</option><option value="authNoPriv">Solo autenticazione</option><option value="authPriv" selected>Autenticazione e cifratura</option></select></div>
+      <div class="field"><label for="snmp-port">Porta (161)</label><input type="text" id="snmp-port" inputmode="numeric" autocomplete="off" data-nofocus></div>
+    </div>
+    <div class="row hidden" data-pane="snmp-v3" id="snmp-auth-row">
+      <div class="field"><label for="snmp-authproto">Autenticazione</label><select id="snmp-authproto" class="w-sm"><option>SHA</option><option>SHA-224</option><option>SHA-256</option><option>SHA-384</option><option>SHA-512</option><option>MD5</option></select></div>
+      <div class="field"><label for="snmp-authpass">Password autenticazione</label><input type="password" id="snmp-authpass" class="w-sm" autocomplete="off"></div>
+      <div class="field" id="snmp-priv-proto"><label for="snmp-privproto">Cifratura</label><select id="snmp-privproto" class="w-xs"><option value="AES">AES-128</option><option>DES</option></select></div>
+      <div class="field" id="snmp-priv-pass"><label for="snmp-privpass">Password cifratura</label><input type="password" id="snmp-privpass" class="w-sm" autocomplete="off"></div>
+    </div>
+    <p class="note sn-note">Un profilo ricorda host, porta, versione, utente e protocolli. Community e password non vengono mai salvate: vanno riscritte.</p>
+    <div class="seg sn-seg2" role="tablist" id="snmp-what">
+      <button type="button" role="tab" data-snmode="dev" aria-selected="true">Dispositivo</button>
+      <button type="button" role="tab" data-snmode="oid" aria-selected="false">OID e tabelle</button>
+    </div>
+    <div class="row">
+      <div class="sn-what" data-snpane="dev"><span class="presets-lbl">Leggi</span>
+        <label class="check"><input type="checkbox" id="snmp-s-sys" checked> Sistema</label>
+        <label class="check"><input type="checkbox" id="snmp-s-if" checked> Interfacce</label>
+        <label class="check"><input type="checkbox" id="snmp-s-nb" checked> Vicini LLDP</label>
+        <label class="check"><input type="checkbox" id="snmp-s-fdb" checked> Tabella MAC e ARP</label>
+        <label class="check"><input type="checkbox" id="snmp-s-res" checked> Risorse</label>
+        <label class="check"><input type="checkbox" id="snmp-s-prn" checked> Stampante</label>
+      </div>
+      <div class="field grow hidden" data-snpane="oid"><label for="snmp-oid">OID o nome (es. sysName.0, ifTable, IF-MIB::ifDescr)</label><input type="text" id="snmp-oid" value="1.3.6.1.2.1.1.1.0" autocomplete="off" spellcheck="false" data-nofocus></div>
+      <div class="field hidden" data-snpane="oid"><label for="snmp-mode">Lettura</label><select id="snmp-mode" class="w-sm"><option value="get">Valore (GET)</option><option value="walk">Ramo (WALK)</option><option value="table">Tabella</option></select></div>
+      <button class="btn secondary hidden" type="button" id="snmp-browse" data-snpane="oid">Sfoglia nomi</button>
+      <button class="btn" type="submit" id="snmp-go">Analizza</button>
+    </div>
+    <div class="sn-sug hidden" id="snmp-sug"></div>
+    <div class="sn-tree hidden" id="snmp-tree">
+      <div class="sn-tree-h"><span><span id="snmp-tree-n"></span>. Clic su un nome per metterlo nel campo OID.</span><label>Filtra <input type="text" class="sn-find" id="snmp-tree-q" autocomplete="off" spellcheck="false" data-nofocus></label></div>
+      <div id="snmp-tree-list"></div>
+    </div>
+    <div class="presets hidden" id="snmp-oids" data-snpane="oid"><span class="presets-lbl">Frequenti</span></div>
+  </form>
+  <div class="results" id="res-snmp"></div>
+</section>
+
+<!-- NTP -->
+<section class="view" id="view-ntp">
+  <header class="view-head">
+    <h1>NTP</h1>
+    <p class="lede">Confronta l'ora di un server NTP con quella di questo PC e ne mostra precisione e stratum.</p>
+  </header>
+  <form class="panel" data-submit="ntp">
+    <div class="row">
+      <div class="field grow"><label for="ntp-host">Server NTP</label><input type="text" id="ntp-host" autocomplete="off" spellcheck="false"></div>
+      <button class="btn" type="submit">Interroga</button>
+    </div>
+    <div class="presets" id="ntp-presets"><span class="presets-lbl">Server pubblici</span></div>
+  </form>
+  <div class="results" id="res-ntp"></div>
+</section>
+
+<!-- WOL -->
+<section class="view" id="view-wol">
+  <header class="view-head">
+    <h1>Wake-on-LAN</h1>
+    <p class="lede">Accende una workstation inviando il magic packet al suo indirizzo MAC.</p>
+  </header>
+  <form class="panel" data-submit="wol">
+    <div class="row">
+      <div class="field"><label for="wol-mac">Indirizzo MAC</label><input type="text" id="wol-mac" class="w-md" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="wol-name">Nome, per salvarla nell'elenco</label><input type="text" id="wol-name" class="w-md" autocomplete="off" spellcheck="false"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="wol-bcast">Broadcast di destinazione</label><input type="text" id="wol-bcast" class="w-md" value="255.255.255.255" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label for="wol-port">Porta UDP</label><select id="wol-port" class="w-xs"><option>9</option><option>7</option></select></div>
+      <button class="btn" type="submit">Accendi</button>
+    </div>
+    <div class="presets hidden" id="wol-saved"><span class="presets-lbl">Salvate</span></div>
+    <p class="note">Con 255.255.255.255 il pacchetto parte da tutte le schede di rete del PC. Per un'altra VLAN indica il suo broadcast (per una /24, l'indirizzo .255): il router o il firewall deve inoltrare il directed broadcast su quell'interfaccia e avere una policy per UDP 9.</p>
+  </form>
+  <div class="results" id="res-wol"></div>
+</section>
+
+<!-- PASSWORD GENERATOR -->
+<section class="view" id="view-pwgen">
+  <header class="view-head">
+    <h1>Generatore password</h1>
+    <p class="lede">Password casuali, create su questo PC con il generatore crittografico di Windows. Nessun dato esce dal PC.</p>
+  </header>
+  <form class="panel" data-submit="pwgen" autocomplete="off">
+    <div data-pane="pwgen-password">
+      <table class="tbl pw-types">
+        <thead><tr><th>Tipo</th><th>Caratteri</th><th>Minimo</th></tr></thead>
+        <tbody>
+          <tr><td><label class="check"><input type="checkbox" id="pw-lower" checked> Minuscole</label></td><td class="m">a–z</td><td><input type="number" id="pw-min-lower" class="w-xs" value="1" min="0" max="10"></td></tr>
+          <tr><td><label class="check"><input type="checkbox" id="pw-upper" checked> Maiuscole</label></td><td class="m">A–Z</td><td><input type="number" id="pw-min-upper" class="w-xs" value="1" min="0" max="10"></td></tr>
+          <tr><td><label class="check"><input type="checkbox" id="pw-digits" checked> Numeri</label></td><td class="m">0–9</td><td><input type="number" id="pw-min-digits" class="w-xs" value="1" min="0" max="10"></td></tr>
+          <tr><td><label class="check"><input type="checkbox" id="pw-symbols" checked> Simboli</label></td><td class="m" id="pw-sym-show"></td><td><input type="number" id="pw-min-symbols" class="w-xs" value="1" min="0" max="10"></td></tr>
+        </tbody>
+      </table>
+      <div class="row">
+        <div class="field grow"><label for="pw-symset">Simboli da usare (vuoto = set predefinito)</label><input type="text" id="pw-symset" data-nofocus value="!@#$%^&amp;*()-_=+[]{}|;:,.&lt;&gt;?" spellcheck="false"></div>
+      </div>
+      <div class="row">
+        <div class="field range"><label for="pw-len">Lunghezza <span class="range-val" id="pw-len-val">20</span></label><input type="range" id="pw-len" min="4" max="64" value="20"></div>
+        <div class="field range"><label for="pw-count">Quantità <span class="range-val" id="pw-count-val">3</span></label><input type="range" id="pw-count" min="1" max="10" value="3"></div>
+      </div>
+      <div class="opts">
+        <label class="check"><input type="checkbox" id="pw-noamb"> Escludi i caratteri ambigui <span class="mono c-dim">0 O o 1 l I | ` ' "</span></label>
+        <label class="check"><input type="checkbox" id="pw-pron"> Pronunciabile (sillabe consonante-vocale)</label>
+      </div>
+      <p class="note hidden" id="pw-pron-note">In modalità pronunciabile numeri e simboli compaiono esattamente nel numero minimo indicato, almeno 1 se il tipo è attivo, in posizioni a caso.</p>
+    </div>
+
+    <div class="pw-foot">
+      <p class="summary" id="pw-preview" aria-live="polite"></p>
+      <div class="pw-actions">
+        <button type="button" class="btn secondary" id="pw-hist-btn" aria-expanded="false" aria-controls="pw-hist">Cronologia <span class="count" id="pw-hist-n">0</span></button>
+        <button class="btn" type="submit" id="pw-btn">Genera password</button>
+      </div>
+    </div>
+  </form>
+  <div class="panel hidden" id="pw-hist">
+    <div class="results-bar"><h2>Cronologia della sessione</h2><button type="button" class="link-btn" id="pw-hist-clear">Svuota cronologia</button></div>
+    <p class="note" style="margin:0 0 12px">Solo in memoria, ultime 20: si cancella alla chiusura dell'app.</p>
+    <div id="pw-hist-body"></div>
+  </div>
+  <p class="note">"Copia" mette la password negli appunti senza salvarla nella cronologia di Windows (Win+V) e la cancella dopo 30 secondi, se nel frattempo non hai copiato altro.</p>
+  <div class="results" id="res-pwgen"></div>
+</section>
+
+<!-- NUMBER CONVERTER -->
+<section class="view" id="view-numconv">
+  <header class="view-head">
+    <h1>Convertitore numerico</h1>
+    <p class="lede">Decimale, esadecimale e binario, aggiornati mentre scrivi in uno qualsiasi dei campi. Interi con segno in complemento a due, griglia dei bit, ordine dei byte, IPv4 e ASCII.</p>
+  </header>
+  <div class="panel" id="nc-panel">
+    <div class="row nc-opts">
+      <div class="seg seg-pick" role="radiogroup" id="nc-width" aria-label="Larghezza">
+        <button type="button" role="radio" data-w="8" aria-checked="false">8 bit</button>
+        <button type="button" role="radio" data-w="16" aria-checked="false">16 bit</button>
+        <button type="button" role="radio" data-w="32" aria-checked="true">32 bit</button>
+        <button type="button" role="radio" data-w="64" aria-checked="false">64 bit</button>
+        <button type="button" role="radio" data-w="free" aria-checked="false">Libera</button>
+      </div>
+      <label class="check"><input type="checkbox" id="nc-signed"> Con segno (complemento a due)</label>
+    </div>
+    <div class="nc-grid">
+      <label for="nc-dec">Decimale<span class="hint">es. 255, -1, 1.000.000</span></label>
+      <input type="text" id="nc-dec" autocomplete="off" spellcheck="false" inputmode="numeric">
+      <div class="row-act"><button type="button" data-nc-copy="dec">Copia</button></div>
+      <label for="nc-hex">Esadecimale<span class="hint">es. FF, 0xC0A8, 00:17:C8</span></label>
+      <input type="text" id="nc-hex" autocomplete="off" spellcheck="false">
+      <div class="row-act"><button type="button" data-nc-copy="hex">Copia</button></div>
+      <label for="nc-bin">Binario<span class="hint">es. 1010, 0b1111_0000</span></label>
+      <input type="text" id="nc-bin" autocomplete="off" spellcheck="false">
+      <div class="row-act"><button type="button" data-nc-copy="bin">Copia</button></div>
+      <label for="nc-ip" class="nc-ip">IPv4<span class="hint">32 bit, es. 192.0.2.10</span></label>
+      <input type="text" id="nc-ip" class="nc-ip" autocomplete="off" spellcheck="false">
+      <div class="row-act nc-ip"><button type="button" data-nc-copy="ip">Copia</button></div>
+    </div>
+    <p class="nc-msg" id="nc-msg" aria-live="polite"></p>
+  </div>
+  <div class="panel hidden" id="nc-bits-panel">
+    <div class="nc-head"><div class="panel-title">Bit</div><p class="summary" id="nc-bits-sum"></p></div>
+    <div class="nc-bits" id="nc-bits"></div>
+    <p class="note hidden" id="nc-bits-note">La griglia mostra fino a 128 bit.</p>
+  </div>
+  <div class="panel hidden" id="nc-info-panel">
+    <div class="panel-title">Interpretazioni</div>
+    <div id="nc-info"></div>
+  </div>
+  <p class="note">Clic su un bit per accenderlo o spegnerlo. "Libera" accetta numeri fino a 1024 bit, solo senza segno; con 8–64 bit un valore troppo grande viene troncato e segnalato. "Copia" copia il valore senza spazi.</p>
+</section>
+
+<!-- UUID GENERATOR -->
+<section class="view" id="view-uuid">
+  <header class="view-head">
+    <h1>Generatore UUID</h1>
+    <p class="lede">UUID casuali, ordinati nel tempo o derivati da un nome, creati su questo PC con il generatore crittografico di Windows. Analizza anche un UUID o un GUID esistente.</p>
+  </header>
+  <form class="panel" data-submit="uuid" autocomplete="off">
+    <div class="seg" role="tablist" data-tabs="uuid">
+      <button type="button" role="tab" data-tab="v4" aria-selected="true">v4 · casuale</button>
+      <button type="button" role="tab" data-tab="v7" aria-selected="false">v7 · ordinato nel tempo</button>
+      <button type="button" role="tab" data-tab="v5" aria-selected="false">v5 · da nome</button>
+    </div>
+    <div data-pane="uuid-v4 uuid-v7">
+      <div class="row">
+        <div class="field range"><label for="uuid-count">Quantità <span class="range-val" id="uuid-count-val">5</span></label><input type="range" id="uuid-count" min="1" max="100" value="5"></div>
+      </div>
+      <p class="note" id="uuid-note-v4">122 bit casuali: la scelta di default per chiavi, identificativi e GUID di Windows.</p>
+      <p class="note hidden" id="uuid-note-v7">I primi 48 bit sono l'ora in millisecondi: in ordine alfabetico gli UUID sono anche in ordine di creazione, utile come chiave di un database.</p>
+    </div>
+    <div class="hidden" data-pane="uuid-v5">
+      <div class="row">
+        <div class="field"><label for="uuid-ns">Namespace</label>
+          <select id="uuid-ns" class="w-md">
+            <option value="dns">DNS (nomi di dominio)</option>
+            <option value="url">URL</option>
+            <option value="oid">OID</option>
+            <option value="x500">X.500 (DN)</option>
+            <option value="custom">Personalizzato…</option>
+          </select></div>
+        <div class="field grow hidden" id="uuid-ns-custom-f"><label for="uuid-ns-custom">UUID del namespace</label><input type="text" id="uuid-ns-custom" data-nofocus spellcheck="false"></div>
+      </div>
+      <div class="row">
+        <div class="field grow"><label for="uuid-names">Nomi, uno per riga (massimo 100)</label><textarea id="uuid-names" rows="4" spellcheck="false"></textarea></div>
+      </div>
+      <p class="note">Lo stesso nome nello stesso namespace dà sempre lo stesso UUID (SHA-1).</p>
+    </div>
+    <div class="uuid-foot">
+      <div class="field"><span class="lbl">Formato</span>
+        <div class="opts" style="margin-top:2px">
+          <label class="check"><input type="checkbox" id="uuid-upper"> Maiuscole</label>
+          <label class="check"><input type="checkbox" id="uuid-hyph" checked> Trattini</label>
+          <div class="seg seg-pick" role="radiogroup" id="uuid-wrap" aria-label="Racchiudi">
+            <button type="button" role="radio" data-wrap="none" aria-checked="true">Nessuno</button>
+            <button type="button" role="radio" data-wrap="braces" aria-checked="false">Graffe <span class="mono">{ }</span></button>
+            <button type="button" role="radio" data-wrap="urn" aria-checked="false"><span class="mono" style="margin:0">urn:uuid:</span></button>
+          </div>
+        </div>
+        <p class="summary mono" id="uuid-sample" style="margin:8px 0 0; font-size:13px"></p>
+      </div>
+      <button class="btn" type="submit" id="uuid-btn">Genera</button>
+    </div>
+  </form>
+  <form class="panel" data-submit="uuidinspect" autocomplete="off">
+    <div class="panel-title">Analizza un UUID o un GUID</div>
+    <div class="row">
+      <div class="field grow"><label for="uuid-in">UUID (con o senza trattini, graffe o urn:uuid:)</label><input type="text" id="uuid-in" data-nofocus spellcheck="false"></div>
+      <button class="btn" type="submit">Analizza</button>
+    </div>
+  </form>
+  <div class="results" id="res-uuid"></div>
+</section>
+
+</main>
+
+<script src="i18n/en-html.js"></script>
+<script src="i18n/en-app1.js"></script>
+<script src="i18n/en-app2.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
