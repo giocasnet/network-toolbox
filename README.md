@@ -29,7 +29,7 @@ every result can be copied or exported as CSV.
 <img src="docs/screenshots/wifi-networks.png" width="49%" alt="Wi-Fi networks">
 </p>
 
-*(Screenshots: Italian interface, sample data with reserved example names and addresses.)*
+*(Screenshots: English interface, sample data with reserved example names and addresses.)*
 
 ## Installation
 

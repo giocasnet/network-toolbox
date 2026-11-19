@@ -29,7 +29,7 @@ senso ogni risultato si può copiare o esportare in CSV.
 <img src="docs/screenshots/wifi-networks.png" width="49%" alt="Reti Wi-Fi">
 </p>
 
-*(Screenshot: interfaccia italiana, dati di esempio con nomi e indirizzi riservati.)*
+*(Screenshot: interfaccia inglese, dati di esempio con nomi e indirizzi riservati.)*
 
 ## Installazione
 
