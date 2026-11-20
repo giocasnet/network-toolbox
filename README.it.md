@@ -63,20 +63,7 @@ inviano traffico vero. **Usali solo su reti e host tuoi o che sei autorizzato a 
 prodotti di sicurezza registreranno le scansioni. L'accesso SNMP è in sola lettura: l'app non invia
 mai richieste SET.
 
-## Politica di firma del codice
-
-Firma del codice gratuita fornita da [SignPath.io](https://signpath.io), certificato di
-[SignPath Foundation](https://signpath.org).
-
-- **Cosa viene firmato:** gli installer e gli eseguibili pubblicati nella pagina Releases,
-  compilati dal sorgente di questo repository dal workflow GitHub Actions. Con questo certificato
-  non si firma nient'altro.
-- **Ruoli:** il progetto ha un solo maintainer, [@giocasnet](https://github.com/giocasnet), che è
-  autore, revisore e approvatore di ogni release.
-- **Verifica:** `Get-AuthenticodeSignature` sul file, oppure la scheda *Firme digitali* nelle
-  proprietà del file. Gli hash SHA-256 in `SHA256SUMS.txt` restano il riferimento.
-
-### Informativa sulla privacy
+## Informativa sulla privacy
 
 Network Toolbox non ha componenti server, telemetria né controllo degli aggiornamenti, e non
 invia mai dati personali all'autore o a terzi. I test di rete partono dal tuo PC, solo quando li

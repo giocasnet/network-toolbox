@@ -62,20 +62,7 @@ The scanning and probing tools (subnet scan, local network, TCP ports, SNMP, SMT
 traffic. **Use them only on networks and hosts you own or are authorised to test.** Security
 products will record the scans. SNMP access is read-only: the app never sends SET requests.
 
-## Code signing policy
-
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by
-[SignPath Foundation](https://signpath.org).
-
-- **What is signed:** the installers and executables published on the Releases page, built from
-  the source in this repository by the GitHub Actions workflow. Nothing else is signed with this
-  certificate.
-- **Roles:** the project has a single maintainer, [@giocasnet](https://github.com/giocasnet), who
-  is author, reviewer and approver of every release.
-- **Verification:** `Get-AuthenticodeSignature` on the file, or the *Digital Signatures* tab in
-  the file properties. The SHA-256 hashes in `SHA256SUMS.txt` remain the reference.
-
-### Privacy policy
+## Privacy policy
 
 Network Toolbox has no server component, no telemetry and no update check, and it never sends
 personal data to the author or to any third party. Network tests start from your PC, only when
