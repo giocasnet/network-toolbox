@@ -225,6 +225,7 @@ mod tests {
                     interval_ms: None,
                     timeout_ms: t,
                     max_hops: h,
+                    ..Default::default()
                 },
                 &stop,
                 |_| {},
@@ -252,6 +253,7 @@ mod tests {
             interval_ms: None,
             timeout_ms: Some(timeout_ms),
             max_hops: None,
+            ..Default::default()
         }
     }
 
@@ -447,6 +449,7 @@ mod tests {
                 interval_ms: None,
                 timeout_ms: None,
                 max_hops: Some(0),
+                ..Default::default()
             },
             &Stop::new(),
             |_| {},

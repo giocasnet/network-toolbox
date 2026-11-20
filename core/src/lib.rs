@@ -12,6 +12,7 @@ pub mod http;
 pub mod i18n;
 pub mod icmp;
 pub mod lan;
+pub mod mtu;
 pub mod myip;
 pub mod neigh;
 pub mod net;

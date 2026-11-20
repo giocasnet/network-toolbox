@@ -223,7 +223,7 @@ Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object Thumbprint, 
 Installazione silenziosa per tutti gli utenti del PC:
 
 ```powershell
-msiexec /i "Network Toolbox_2.1.0_x64_it-IT.msi" /qn /norestart
+msiexec /i "Network Toolbox_2.2.0_x64_it-IT.msi" /qn /norestart
 ```
 
 Una versione più recente aggiorna quella installata: l'upgrade code dell'MSI è fissato in

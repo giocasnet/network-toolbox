@@ -1,7 +1,7 @@
 """UI test with simulated Tauri IPC (headless Chromium).
 Usage: python -E -P dev/ui-mock/ui_smoke.py [ui folder] [screenshot folder]
 (not -I: it excludes packages installed with --user, where Playwright lives)
-The expected version (2.1.0) must be updated at every release."""
+The expected version (2.2.0) must be updated at every release."""
 import sys, pathlib, threading, functools, http.server
 from playwright.sync_api import sync_playwright
 
@@ -23,7 +23,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
   core: { Channel, invoke: async (cmd, args) => {
   window.__calls.push([cmd, JSON.parse(JSON.stringify(args && args.req || {}))]);
   if (cmd === 'set_lang') { window.__lang = args.lang; return null; }
-  if (cmd === 'app_info') return {hostname:'SRV01.corp.example', ip:'172.16.7.42', version:'2.1.0', os:'windows'};
+  if (cmd === 'app_info') return {hostname:'SRV01.corp.example', ip:'172.16.7.42', version:'2.2.0', os:'windows'};
   if (cmd === 'internet_check') return window.__online ? {online:true, target:'1.1.1.1', rtt_ms:12.3, local_ip:'172.16.7.42'} : {online:false, target:null, rtt_ms:null};
   // "Ferma" (Stop): interrupts the running test of the same tool
   if (cmd === 'ping_stop' || cmd === 'traceroute_stop') { const f = window.__probe[cmd.replace('_stop', '')]; if (f) f(); return null; }
@@ -44,7 +44,11 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
       emit(ping ? 'Fermato prima della risposta al primo pacchetto.' : 'fermato prima della fine');
     } else {
       meta = {ip:'198.51.100.1', name:h}; if (ch) ch.onmessage({meta});
-      if (h !== 'lento') {
+      if (ping && r.mtu) {
+        ["Ricerca dell'MTU verso "+h+' (198.51.100.1) con "Non frammentare".',
+         'Pacchetto da 60 byte (dati 32): risposta', 'Pacchetto da 1500 byte (dati 1472): risposta',
+         'Pacchetto da 1501 byte (dati 1473): troppo grande', '', 'mtu=1500 (dati 1472 + 28 byte di intestazioni)'].forEach(emit);
+      } else if (h !== 'lento') {
         (ping ? ['PING '+h+' (198.51.100.1) 32 bytes of data.', '40 bytes from 198.51.100.1: icmp_seq=1 ttl=255 time=0.412 ms', '', '--- '+h+' ping statistics ---', '1 packets transmitted, 1 received, 0% packet loss', 'rtt min/avg/max/mdev = 0.412/0.412/0.412/0.000 ms']
               : ['traceroute to '+h+' (198.51.100.1), 30 hops max, 32 byte packets', ' 1  172.16.7.1  0.512 ms', ' 2  198.51.100.1  1.20 ms']).forEach(emit);
       } else if (ping) {
@@ -789,7 +793,7 @@ with sync_playwright() as p:
         # startup: home screen, no menu item selected
         assert pg.locator('#view-home').is_visible(), 'home non visibile'
         assert pg.locator('.nav-item[aria-current]').count() == 0
-        assert pg.inner_text('#home-version') == '2.1.0'
+        assert pg.inner_text('#home-version') == '2.2.0'
         assert pg.get_attribute('.topbar .brand', 'title') == 'SRV01.corp.example · 172.16.7.42'
         assert pg.locator('#brand-host').count() == 0 and 'App desktop' not in pg.inner_text('.topbar')
         assert pg.evaluate("document.querySelector('.topbar').getBoundingClientRect().height") == 40
@@ -833,7 +837,7 @@ with sync_playwright() as p:
         assert pg.evaluate("""Promise.all(['home-map.webp', 'home-ground.webp'].map(u => new Promise(ok => {
           const i = new Image(); i.onload = () => ok(i.naturalWidth > 1000); i.onerror = () => ok(false); i.src = u; }))).then(r => r.every(Boolean))""")
         cr = pg.inner_text('.side-credits')
-        assert 'Versione 2.1.0' in cr and '© 2026 Giorgio Casciola' in cr and 'Apache 2.0' in cr, cr
+        assert 'Versione 2.2.0' in cr and '© 2026 Giorgio Casciola' in cr and 'Apache 2.0' in cr, cr
         for w, h in ((1000, 640), (1920, 1080), (1269, 700)):
             pg.set_viewport_size({'width': w, 'height': h}); pg.wait_for_timeout(100)
             home_layout(pg, theme)
@@ -869,6 +873,31 @@ with sync_playwright() as p:
         assert req['count'] == '100' and req['interval_ms'] == '1000' and req['timeout_ms'] == '2000', req
         assert pg.inner_text(PB) == 'Esegui ping' and not pg.is_disabled(PB) and box(PB) == idle_box
         pg.screenshot(path=str(OUT / f'ping-{theme}.png'))
+        # size and "Do not fragment": default, preset, free value; menu = 6 presets + "Altro..."
+        assert req['size'] == '32' and req['dont_fragment'] is False, req
+        assert pg.eval_on_selector_all('#ping-size option', 'o => o.map(x => x.value)') == ['32', '64', '512', '1024', '1472', '1500', 'custom']
+        assert not pg.locator('#ping-size-custom-box').is_visible()
+        pg.select_option('#ping-size', '1472'); pg.check('#opt-df'); pg.click(PB)
+        pg.wait_for_function("window.__calls.filter(c => c[0] === 'ping_stream').length >= 2"); pg.wait_for_selector('#res-ping .strip.ok')
+        req = calls('ping_stream')[-1][1]
+        assert req['size'] == '1472' and req['dont_fragment'] is True, req
+        pg.select_option('#ping-size', 'custom')
+        assert pg.locator('#ping-size-custom-box').is_visible()
+        pg.fill('#ping-size-custom', '9000'); pg.click(PB)
+        pg.wait_for_function("window.__calls.filter(c => c[0] === 'ping_stream').length >= 3"); pg.wait_for_selector('#res-ping .strip.ok')
+        assert calls('ping_stream')[-1][1]['size'] == '9000'
+        pg.screenshot(path=str(OUT / f'ping-size-{theme}.png'))
+        # path MTU: same command with mtu=true, result with the value read from the "mtu=" line
+        pg.click('#ping-mtu')
+        pg.wait_for_function("window.__calls.filter(c => c[0] === 'ping_stream').length >= 4"); pg.wait_for_selector('#res-ping .strip.ok:first-child')
+        req = calls('ping_stream')[-1][1]
+        assert req['mtu'] is True and req['host'] == 'fw01' and 'size' not in req, req
+        t = pg.locator('#res-ping .strip').first.inner_text()
+        assert 'MTU del percorso' in t and '1500' in t and '1472' in t and 'troppo grande' in t, t
+        pg.screenshot(path=str(OUT / f'ping-mtu-{theme}.png'))
+        pg.select_option('#ping-size', '32'); pg.uncheck('#opt-df')
+        assert not pg.locator('#ping-size-custom-box').is_visible()
+        assert pg.inner_text(PB) == 'Esegui ping' and box(PB) == idle_box
         # "Ferma": during the test the same button, in the same place, becomes "Ferma"
         def stop_flow(view, btn, label, stream, stop_cmd, how):
             n_stream, n_stop = len(calls(stream)), len(calls(stop_cmd))
@@ -1540,6 +1569,14 @@ with sync_playwright() as p:
         pg.click('.nav-item[data-view="email"]')
         ES = '#res-email .strip:first-child '
         EB = '#view-email form[data-submit="email"] button[type=submit]'
+        # two tabs: domain records (default) and message headers; one form visible at a time
+        assert pg.eval_on_selector_all('[data-tabs="email"] button', 'b => b.map(x => x.textContent.trim())') == ['Record DNS del dominio', 'Header di un messaggio']
+        assert pg.locator('#email-domain').is_visible() and not pg.locator('#email-raw').is_visible()
+        pg.click('[data-tabs="email"] [data-tab="header"]')
+        assert pg.locator('#email-raw').is_visible() and not pg.locator('#email-domain').is_visible()
+        pg.screenshot(path=str(OUT / f'email-tab-header-{theme}.png'))
+        pg.click('[data-tabs="email"] [data-tab="domain"]')
+        assert pg.locator('#email-domain').is_visible() and not pg.locator('#email-raw').is_visible()
         etab = lambda k: pg.click(ES + f'.seg.rtabs [data-rtab="{k}"]')
         etabs = lambda: pg.eval_on_selector_all(ES + '.seg.rtabs button', 'b => b.map(x => x.innerText.replace(/\\s+/g, " ").trim())')
         eorder = lambda: pg.eval_on_selector_all(ES + '[data-rpane="chk"] > table:first-child tbody tr td:first-child .pill', 'p => p.map(x => ["err", "warn", "info", "ok"].find(c => x.classList.contains(c)))')
@@ -1604,6 +1641,7 @@ with sync_playwright() as p:
         pg.click('.nav-item[data-view="email"]')
         # headers of a fake message: error, only the first Authentication-Results
         HB = '#view-email form[data-submit="emailraw"] button[type=submit]'
+        pg.click('[data-tabs="email"] [data-tab="header"]')
         pg.fill('#email-raw', 'Subject: Prova\nAuthentication-Results: spf=fail\n'); pg.click(HB)
         pg.wait_for_selector('#res-email .strip.err >> text=Header messaggio')
         t = pg.inner_text(ES)

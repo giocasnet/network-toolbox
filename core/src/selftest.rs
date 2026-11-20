@@ -23,6 +23,7 @@ fn esito(s: Status) -> String {
         Status::Timeout => "nessuna risposta".into(),
         Status::TtlExpired => "TTL scaduto".into(),
         Status::Unreachable => "irraggiungibile".into(),
+        Status::TooBig => "pacchetto troppo grande".into(),
         Status::Error(c) => format!("errore {c}"),
     }
 }
@@ -53,6 +54,22 @@ pub async fn run(silent: Option<Ipv4Addr>) -> Vec<String> {
         esito(b.status),
         b.rtt_ms
     ));
+
+    // payload size and "Do not fragment" on the loopback (MTU 65535 on Windows: they must pass)
+    for (size, df) in [(1472usize, true), (8000, true), (0, false)] {
+        let o = icmp::EchoOpts {
+            ttl: 128,
+            size,
+            dont_fragment: df,
+        };
+        let e = icmp::echo_with(lo, o, 1000).await;
+        out.push(format!(
+            "127.0.0.1: echo con {size} byte di dati{}: {} in {:.3} ms",
+            if df { " e Non frammentare" } else { "" },
+            esito(e.status),
+            e.rtt_ms
+        ));
+    }
 
     const BURST: usize = 128;
     let t0 = Instant::now();

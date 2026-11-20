@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0 — 20 Nov 2026 — Ping size and MTU, Email tabs
+- **Ping**: selectable data size (presets 32, 64, 512, 1024, 1472, 1500, or any value from 0 to
+  65500 bytes) and a "Do not fragment" (DF) option. A packet that does not fit the path is shown as
+  `Frag needed and DF set`.
+- **Find MTU** button: sends echoes with DF and a growing size and finds the largest packet the
+  path carries (binary search; the usual 1500 is confirmed in three packets). The result is the
+  path MTU and the largest data size for an unfragmented ping.
+- **Email**: the two forms (domain records, message headers) are now two tabs.
+
 ## 2.1.0 — 18 Nov 2026 — portable version
 - **Portable version**: `build.ps1` also produces `release\NetworkToolbox-portable\` and
   `NetworkToolbox-<version>-portable.zip` (exe, `oui.txt`, `portable.txt`, licence files), to run

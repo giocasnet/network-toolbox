@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct PingReq {
     pub host: String,
     #[serde(default, deserialize_with = "util::opt_u32")]
@@ -28,6 +28,15 @@ pub struct PingReq {
     /// Traceroute: maximum number of hops.
     #[serde(default, deserialize_with = "util::opt_u32")]
     pub max_hops: Option<u32>,
+    /// Ping: data bytes in every packet (default 32).
+    #[serde(default, deserialize_with = "util::opt_u32")]
+    pub size: Option<u32>,
+    /// Ping: set the "Do not fragment" bit.
+    #[serde(default)]
+    pub dont_fragment: Option<bool>,
+    /// Ping: instead of the normal test, look for the path MTU (always with "Do not fragment").
+    #[serde(default)]
+    pub mtu: Option<bool>,
 }
 
 /// Switch of a running ping or traceroute ("Stop" button).
@@ -74,6 +83,7 @@ pub const MIN_INTERVAL_MS: u32 = 100;
 pub const MAX_INTERVAL_MS: u32 = 2000;
 pub const MIN_TIMEOUT_MS: u32 = 100;
 pub const MAX_TIMEOUT_MS: u32 = 5000;
+pub const MAX_SIZE: u32 = icmp::MAX_PAYLOAD as u32;
 
 /// Requested (or default) timeout, within the allowed limits.
 pub(crate) fn timeout(req: &PingReq) -> Result<u32> {
@@ -85,6 +95,18 @@ pub(crate) fn timeout(req: &PingReq) -> Result<u32> {
         ));
     }
     Ok(t)
+}
+
+/// Requested (or default) payload size, within the allowed limits.
+pub(crate) fn size(req: &PingReq) -> Result<usize> {
+    let n = req.size.unwrap_or(PAYLOAD as u32);
+    if n > MAX_SIZE {
+        return Err(tf!(
+            "Dimensione: da 0 a {MAX_SIZE} byte",
+            "Size: 0 to {MAX_SIZE} bytes"
+        ));
+    }
+    Ok(n as usize)
 }
 
 /// Runs the ping. Returns `true` if it was stopped with `stop` before the
@@ -106,19 +128,24 @@ pub async fn run<F: FnMut(Event) + Send>(req: PingReq, stop: &Stop, mut emit: F)
         ));
     }
     let timeout_ms = timeout(&req)?;
+    let size = size(&req)?;
+    let dont_fragment = req.dont_fragment.unwrap_or(false);
     let resolve = req.resolve.unwrap_or(true);
     let Some(ip) = stop.race(net::resolve_v4(&host)).await else {
         emit(Event::Line(stopped_early().into()));
         return Ok(true);
     };
     let ip = ip?;
+    if req.mtu == Some(true) {
+        return crate::mtu::run(&host, ip, timeout_ms, stop, &mut emit).await;
+    }
     // The target name is looked up while the first packet goes out: the test does not wait for it.
     let mut meta = MetaLookup::start(&host, ip);
 
     let mut names: HashMap<Ipv4Addr, String> = HashMap::new();
     let mut rtts = Vec::new();
     emit(Event::Line(format!(
-        "PING {host} ({ip}) {PAYLOAD} bytes of data."
+        "PING {host} ({ip}) {size} bytes of data."
     )));
 
     // Packets with an outcome (reply, error or timeout): the one pending
@@ -127,7 +154,18 @@ pub async fn run<F: FnMut(Event) + Send>(req: PingReq, stop: &Stop, mut emit: F)
     let mut stopped = false;
     for seq in 1..=count {
         let started = Instant::now();
-        let Some(e) = stop.race(icmp::echo(ip, 128, timeout_ms)).await else {
+        let Some(e) = stop
+            .race(icmp::echo_with(
+                ip,
+                icmp::EchoOpts {
+                    ttl: 128,
+                    size,
+                    dont_fragment,
+                },
+                timeout_ms,
+            ))
+            .await
+        else {
             stopped = true;
             break;
         };
@@ -152,7 +190,7 @@ pub async fn run<F: FnMut(Event) + Send>(req: PingReq, stop: &Stop, mut emit: F)
                 rtts.push(e.rtt_ms);
                 format!(
                     "{} bytes from {who}: icmp_seq={seq} ttl={} time={} ms",
-                    PAYLOAD + 8,
+                    size + 8,
                     e.ttl.map(|t| t.to_string()).unwrap_or_else(|| "?".into()),
                     fmt_rtt(e.rtt_ms)
                 )
@@ -160,6 +198,7 @@ pub async fn run<F: FnMut(Event) + Send>(req: PingReq, stop: &Stop, mut emit: F)
             Status::Timeout => format!("Request timed out: icmp_seq={seq}"),
             Status::TtlExpired => format!("From {who} icmp_seq={seq} Time to live exceeded"),
             Status::Unreachable => format!("From {who} icmp_seq={seq} Destination unreachable"),
+            Status::TooBig => format!("From {who} icmp_seq={seq} Frag needed and DF set"),
             Status::Error(code) => {
                 tf!(
                     "Errore di sistema {code}: icmp_seq={seq}",
@@ -314,6 +353,7 @@ mod tests {
                     interval_ms: None,
                     timeout_ms: None,
                     max_hops: None,
+                    ..Default::default()
                 },
                 &stop,
                 |_| {},
@@ -328,6 +368,7 @@ mod tests {
                     interval_ms: i,
                     timeout_ms: t,
                     max_hops: None,
+                    ..Default::default()
                 },
                 &stop,
                 |_| {},
@@ -369,6 +410,7 @@ mod tests {
             interval_ms: Some(interval_ms),
             timeout_ms: Some(timeout_ms),
             max_hops: None,
+            ..Default::default()
         }
     }
 
@@ -388,6 +430,54 @@ mod tests {
         assert_eq!(err.unwrap_err(), "Interval: 100 to 2000 ms");
         let err = rt.block_on(run(req("1.2.3.4", 1, 1000, 50), &Stop::new(), |_| {}));
         assert_eq!(err.unwrap_err(), "Timeout: 100 to 5000 ms");
+    }
+
+    #[test]
+    fn dimensione_e_df() {
+        let r = |size: Option<u32>| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            rt.block_on(run(
+                PingReq {
+                    size,
+                    ..req("127.0.0.1", 1, 1000, 1000)
+                },
+                &Stop::new(),
+                |_| {},
+            ))
+        };
+        assert_eq!(r(Some(65501)).unwrap_err(), "Dimensione: da 0 a 65500 byte");
+        {
+            let _g = crate::i18n::scoped(crate::i18n::Lang::En);
+            assert_eq!(r(Some(65501)).unwrap_err(), "Size: 0 to 65500 bytes");
+        }
+        // an empty string from the form means "default"
+        let q: PingReq =
+            serde_json::from_str(r#"{"host":"x","size":"","dont_fragment":true}"#).unwrap();
+        assert_eq!(q.size, None);
+        assert_eq!(q.dont_fragment, Some(true));
+        let q: PingReq = serde_json::from_str(r#"{"host":"x","size":"1472"}"#).unwrap();
+        assert_eq!(q.size, Some(1472));
+    }
+
+    /// The header line and the reply lines carry the requested size.
+    #[tokio::test]
+    async fn dimensione_nelle_righe() {
+        let (text, _, _) = collect(
+            PingReq {
+                size: Some(100),
+                ..req("127.0.0.1", 1, 100, 1000)
+            },
+            &Stop::new(),
+        )
+        .await
+        .unwrap();
+        assert!(text.contains("100 bytes of data."), "{text}");
+        assert!(
+            text.contains("108 bytes from") || text.contains("Request timed out"),
+            "{text}"
+        );
     }
 
     #[test]

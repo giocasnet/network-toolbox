@@ -231,7 +231,7 @@ $('home-btn').addEventListener('click', () => {
 show(allowed(location.hash.slice(1)) ? location.hash.slice(1) : 'home');
 
 /* ── tabs (SNMP, generators, DNS) ── */
-const tabState = {snmp:'v2c', uuid:'v4', wifi:'nets', dns:'compare', lan:'scan'};
+const tabState = {snmp:'v2c', uuid:'v4', wifi:'nets', dns:'compare', lan:'scan', email:'domain'};
 document.querySelectorAll('[data-tabs]').forEach(bar => {
   const group = bar.dataset.tabs;
   bar.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
@@ -466,6 +466,27 @@ function pingSummary(out, meta, stopped){
     [__('Min / max'), rtt ? rtt[1] + ' / ' + rtt[3] + ' ms' : '—']
   ]) + '<div style="height:14px"></div>'};
 }
+/* Payload chosen in the Ping form: preset or free value (empty = default in the backend) */
+function pingSize(){
+  const v = $('ping-size').value;
+  return v === 'custom' ? val('ping-size-custom') : v;
+}
+$('ping-size').addEventListener('change', () => {
+  const custom = $('ping-size').value === 'custom';
+  $('ping-size-custom-box').classList.toggle('hidden', !custom);
+  if (custom) $('ping-size-custom').focus();
+});
+function mtuSummary(out, meta, stopped){
+  const m = out.match(/^mtu=(\d+)/m);
+  if (!m) return {status: stopped ? 'stop' : 'err', prefix: ''};
+  const mtu = parseInt(m[1], 10);
+  // the backend marks the doubtful result with a line starting "(!)"
+  return {status: /^\(!\)/m.test(out) ? 'warn' : 'ok', prefix: kv([
+    [__('MTU del percorso'), mtu + ' ' + __('byte'), 'big ok'],
+    [__('Dati massimi per pacchetto'), (mtu - 28) + ' ' + __('byte'), 'big'],
+    [__('Per un ping senza frammentazione'), __('dimensione dati ≤ {n}', {n: mtu - 28}), 'txt']
+  ]) + '<div style="height:14px"></div>'};
+}
 function traceSummary(out, meta, stopped){
   const hops = out.split('\n').filter(l => /^\s*\d+\s/.test(l));
   if (stopped && !hops.length) return {status: 'stop', prefix: ''};
@@ -480,7 +501,8 @@ const tools = {
   ping: form => {
     const host = val('ping-host'), count = val('ping-count') || 4;
     if (!host) return $('ping-host').focus();
-    const payload = {host, count, interval_ms: val('ping-interval'), timeout_ms: val('ping-timeout'), resolve: $('opt-resolve').checked};
+    const payload = {host, count, interval_ms: val('ping-interval'), timeout_ms: val('ping-timeout'), resolve: $('opt-resolve').checked,
+      size: pingSize(), dont_fragment: $('opt-df').checked};
     if ($('opt-live').checked) return runLive('ping', 'Ping', host, '/api/ping/stream', payload, form, pingSummary);
     run('ping', 'Ping', host, async () => {
       const d = await call('/api/ping', payload);
@@ -488,6 +510,15 @@ const tools = {
       const r = pingSummary(d.output, d.meta, d.stopped);
       return {status: d.stopped ? 'stop' : r.status, html: r.prefix + pre(d.output)};
     }, form);
+  },
+
+  /* Path MTU: echo with "Do not fragment" and growing size, always live (the steps are the result) */
+  pingmtu: form => {
+    if (form.dataset.running) return;
+    const host = val('ping-host');
+    if (!host) return $('ping-host').focus();
+    const payload = {host, timeout_ms: val('ping-timeout'), resolve: false, mtu: true};
+    runLive('ping', __('Ping — MTU'), host, '/api/ping/stream', payload, form, mtuSummary);
   },
 
   traceroute: form => {
@@ -2803,7 +2834,7 @@ function gotoTool(e){
   if (to === 'ssl'){ $('ssl-host').value = b.dataset.host; $('ssl-port').value = 25; $('ssl-proto').value = 'smtp'; $('ssl-host').focus(); }
   if (to === 'blacklist'){ $('bl-host').value = b.dataset.host; $('bl-host').focus(); }
   // from the DKIM signature of a message: domain and selector in the domain form
-  if (to === 'email'){ $('email-domain').value = b.dataset.domain; $('email-sel').value = b.dataset.selector; $('email-domain').focus(); $('view-email').scrollIntoView(); }
+  if (to === 'email'){ document.querySelector('[data-tabs="email"] [data-tab="domain"]').click(); $('email-domain').value = b.dataset.domain; $('email-sel').value = b.dataset.selector; $('email-domain').focus(); $('view-email').scrollIntoView(); }
 }
 $('res-sweep').addEventListener('click', gotoTool);
 $('res-lan').addEventListener('click', gotoTool);

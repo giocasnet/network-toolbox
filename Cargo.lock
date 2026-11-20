@@ -2180,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "nettoolbox"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "ntb-core",
  "serde",
@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "ntb-core"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "aes",
  "cbc",

@@ -368,5 +368,11 @@ Object.assign(window.NTB_EN = window.NTB_EN || {}, {
   "Nessuna password generata in questa sessione.": "No password generated in this session.",
   "Ora": "Time",
   "Analisi": "Analysis",
-  "Tabella": "Table"
+  "Tabella": "Table",
+  "Ping — MTU": "Ping — MTU",
+  "MTU del percorso": "Path MTU",
+  "byte": "bytes",
+  "Dati massimi per pacchetto": "Maximum data per packet",
+  "Per un ping senza frammentazione": "For an unfragmented ping",
+  "dimensione dati ≤ {n}": "data size ≤ {n}"
 });

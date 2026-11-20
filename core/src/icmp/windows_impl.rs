@@ -9,7 +9,7 @@
 //!   while waiting: no thread per probe. If the engine does not start or does not
 //!   answer, the caller falls back to `echo_blocking`.
 
-use super::{Echo, Status, PAYLOAD};
+use super::{Echo, EchoOpts, Status, PAYLOAD};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem::size_of;
@@ -41,6 +41,7 @@ const IP_DEST_NET_UNREACHABLE: u32 = 11002;
 const IP_DEST_HOST_UNREACHABLE: u32 = 11003;
 const IP_DEST_PROT_UNREACHABLE: u32 = 11004;
 const IP_DEST_PORT_UNREACHABLE: u32 = 11005;
+const IP_PACKET_TOO_BIG: u32 = 11009;
 const IP_REQ_TIMED_OUT: u32 = 11010;
 const IP_TTL_EXPIRED_TRANSIT: u32 = 11013;
 const IP_TTL_EXPIRED_REASSEM: u32 = 11014;
@@ -49,6 +50,7 @@ fn status_of(code: u32) -> Status {
     match code {
         IP_SUCCESS => Status::Reply,
         IP_TTL_EXPIRED_TRANSIT | IP_TTL_EXPIRED_REASSEM => Status::TtlExpired,
+        IP_PACKET_TOO_BIG => Status::TooBig,
         IP_REQ_TIMED_OUT => Status::Timeout,
         IP_DEST_NET_UNREACHABLE
         | IP_DEST_HOST_UNREACHABLE
@@ -58,17 +60,22 @@ fn status_of(code: u32) -> Status {
     }
 }
 
-/// Space for the reply: ICMP_ECHO_REPLY + data + 8 bytes for a possible ICMP
-/// error message + IO_STATUS_BLOCK (required by asynchronous calls) + margin.
-const REPLY_LEN: usize =
-    size_of::<ICMP_ECHO_REPLY>() + PAYLOAD + 8 + size_of::<IO_STATUS_BLOCK>() + 64;
+/// IP_FLAG_DF of `IP_OPTION_INFORMATION.Flags`: "Do not fragment".
+const IP_FLAG_DF: u8 = 0x02;
+
+/// Space for the reply to a request with `size` data bytes: ICMP_ECHO_REPLY +
+/// data + 8 bytes for a possible ICMP error message + IO_STATUS_BLOCK (required
+/// by asynchronous calls) + margin.
+fn reply_len(size: usize) -> usize {
+    size_of::<ICMP_ECHO_REPLY>() + size + 8 + size_of::<IO_STATUS_BLOCK>() + 64
+}
 
 /// Data of every echo request.
 static DATA: [u8; PAYLOAD] = [b'a'; PAYLOAD];
 
 /// Reply buffer, 8-byte aligned.
-fn reply_buffer() -> Vec<u64> {
-    vec![0u64; REPLY_LEN.div_ceil(8)]
+fn reply_buffer(size: usize) -> Vec<u64> {
+    vec![0u64; reply_len(size).div_ceil(8)]
 }
 
 /// Parses the buffer filled by IcmpSendEcho / IcmpParseReplies.
@@ -79,7 +86,7 @@ fn reply_buffer() -> Vec<u64> {
 /// reply arriving and its delivery to the thread.
 ///
 /// # Safety
-/// `buf` must be the buffer passed to the ICMP call, at least `REPLY_LEN` long.
+/// `buf` must be the buffer passed to the ICMP call, at least `reply_len(size)` long.
 unsafe fn parse_reply(
     buf: &[u64],
     n: u32,
@@ -132,8 +139,9 @@ fn error(code: u32) -> Echo {
     }
 }
 
-pub fn echo_blocking(dest: Ipv4Addr, ttl: u8, timeout_ms: u32) -> Echo {
-    let mut buf = reply_buffer();
+pub fn echo_blocking(dest: Ipv4Addr, o: EchoOpts, timeout_ms: u32) -> Echo {
+    let mut buf = reply_buffer(o.size);
+    let data = vec![b'a'; o.size];
     unsafe {
         let handle = IcmpCreateFile();
         if handle == INVALID_HANDLE_VALUE {
@@ -145,14 +153,17 @@ pub fn echo_blocking(dest: Ipv4Addr, ttl: u8, timeout_ms: u32) -> Echo {
             };
         }
         let mut opts: IP_OPTION_INFORMATION = std::mem::zeroed();
-        opts.Ttl = ttl;
+        opts.Ttl = o.ttl;
+        if o.dont_fragment {
+            opts.Flags = IP_FLAG_DF;
+        }
 
         let t0 = Instant::now();
         let n = IcmpSendEcho(
             handle,
             u32::from_ne_bytes(dest.octets()),
-            DATA.as_ptr() as *const c_void,
-            PAYLOAD as u16,
+            data.as_ptr() as *const c_void,
+            o.size as u16,
             &opts,
             buf.as_mut_ptr() as *mut c_void,
             (buf.len() * 8) as u32,
@@ -243,7 +254,7 @@ unsafe fn start(icmp: HANDLE, job: Job) {
     let mut opts: IP_OPTION_INFORMATION = std::mem::zeroed();
     opts.Ttl = job.ttl;
     let ctx = Box::into_raw(Box::new(Pending {
-        buf: reply_buffer(),
+        buf: reply_buffer(PAYLOAD),
         t0: Instant::now(),
         reply: Some(job.reply),
     }));

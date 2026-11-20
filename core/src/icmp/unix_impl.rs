@@ -1,29 +1,38 @@
 //! Linux backend (development and tests): system `ping` and kernel ARP table.
 
-use super::{Echo, Status};
+use super::{Echo, EchoOpts, Status};
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::process::Command;
 use std::time::Instant;
 
-pub fn echo_blocking(dest: Ipv4Addr, ttl: u8, timeout_ms: u32) -> Echo {
+pub fn echo_blocking(dest: Ipv4Addr, o: EchoOpts, timeout_ms: u32) -> Echo {
     let secs = timeout_ms.div_ceil(1000).max(1).to_string();
     let t0 = Instant::now();
-    let out = Command::new("ping")
-        .args([
-            "-n",
-            "-c",
-            "1",
-            "-W",
-            &secs,
-            "-t",
-            &ttl.to_string(),
-            &dest.to_string(),
-        ])
-        .output();
+    let mut cmd = Command::new("ping");
+    cmd.args([
+        "-n",
+        "-c",
+        "1",
+        "-W",
+        &secs,
+        "-t",
+        &o.ttl.to_string(),
+        "-s",
+        &o.size.to_string(),
+    ]);
+    if o.dont_fragment {
+        cmd.args(["-M", "do"]);
+    }
+    let out = cmd.arg(dest.to_string()).output();
     let elapsed = t0.elapsed().as_secs_f64() * 1000.0;
     match out {
-        Ok(o) => parse_ping(&String::from_utf8_lossy(&o.stdout), elapsed),
+        Ok(o) => {
+            // "message too long" (local MTU) is written on stderr
+            let mut text = String::from_utf8_lossy(&o.stdout).into_owned();
+            text.push_str(&String::from_utf8_lossy(&o.stderr));
+            parse_ping(&text, elapsed)
+        }
         Err(_) => Echo {
             status: Status::Error(2),
             from: None,
@@ -36,6 +45,14 @@ pub fn echo_blocking(dest: Ipv4Addr, ttl: u8, timeout_ms: u32) -> Echo {
 /// Parses the iputils-ping output for a single packet.
 pub(crate) fn parse_ping(out: &str, elapsed_ms: f64) -> Echo {
     for line in out.lines() {
+        if line.contains("message too long") {
+            return Echo {
+                status: Status::TooBig,
+                from: None,
+                rtt_ms: elapsed_ms,
+                ttl: None,
+            };
+        }
         if let Some(rest) = line.split(" bytes from ").nth(1) {
             let from = rest.split(':').next().and_then(|s| s.trim().parse().ok());
             let ttl = field(line, "ttl=").and_then(|v| v.parse().ok());
@@ -56,6 +73,8 @@ pub(crate) fn parse_ping(out: &str, elapsed_ms: f64) -> Echo {
                 .and_then(|s| s.trim_end_matches(':').parse().ok());
             let status = if line.contains("Time to live exceeded") {
                 Status::TtlExpired
+            } else if line.contains("Frag needed") {
+                Status::TooBig
             } else {
                 Status::Unreachable
             };

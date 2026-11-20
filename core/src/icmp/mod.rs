@@ -26,8 +26,34 @@ pub enum Status {
     Timeout,
     /// Destination, network or protocol unreachable.
     Unreachable,
+    /// The packet is larger than the path MTU and has "Do not fragment" set.
+    TooBig,
     /// Local error (system code).
     Error(u32),
+}
+
+/// Largest echo payload accepted (IPv4 total length is 65535, minus 20 + 8 + margin).
+pub const MAX_PAYLOAD: usize = 65500;
+
+/// Options of one echo request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EchoOpts {
+    pub ttl: u8,
+    /// Data bytes after the 8-byte ICMP header.
+    pub size: usize,
+    /// Sets the "Do not fragment" bit in the IP header.
+    pub dont_fragment: bool,
+}
+
+impl EchoOpts {
+    /// Default echo: 32 data bytes, fragmentation allowed.
+    pub fn new(ttl: u8) -> Self {
+        EchoOpts {
+            ttl,
+            size: PAYLOAD,
+            dont_fragment: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -67,7 +93,12 @@ pub const ARP_ACTIVE: bool = cfg!(windows);
 
 /// Sends an echo request with the given TTL and waits for the reply.
 pub async fn echo(dest: Ipv4Addr, ttl: u8, timeout_ms: u32) -> Echo {
-    tokio::task::spawn_blocking(move || backend::echo_blocking(dest, ttl, timeout_ms))
+    echo_with(dest, EchoOpts::new(ttl), timeout_ms).await
+}
+
+/// Like `echo`, with payload size and the "Do not fragment" bit.
+pub async fn echo_with(dest: Ipv4Addr, opts: EchoOpts, timeout_ms: u32) -> Echo {
+    tokio::task::spawn_blocking(move || backend::echo_blocking(dest, opts, timeout_ms))
         .await
         .unwrap_or_else(|_| Echo::timeout())
 }
