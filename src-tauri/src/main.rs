@@ -520,16 +520,30 @@ struct ClipReq {
 
 /// Copies a password to the clipboard, outside the Win+V history, and clears it
 /// after `CLEAR_AFTER_SECS` seconds if nothing else has been copied in the meantime.
+/// Only the timer of the last copy acts: the earlier ones end without touching anything.
 #[tauri::command]
-fn clipboard_secret(req: ClipReq) -> Result<u64, String> {
+fn clipboard_secret(window: tauri::WebviewWindow, req: ClipReq) -> Result<u64, String> {
     use ntb_core::clipboard;
-    let seq = clipboard::copy_secret(&req.text)?;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static GENERATION: AtomicU64 = AtomicU64::new(0);
+    // the window becomes the clipboard owner; without its handle the copy is still tried
+    #[cfg(windows)]
+    let owner = window.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+    #[cfg(not(windows))]
+    let owner = {
+        let _ = &window;
+        0
+    };
+    let seq = clipboard::copy_secret(&req.text, owner)?;
     if let Ok(mut l) = LAST_SECRET.lock() {
         *l = Some(seq);
     }
+    let gen = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(clipboard::CLEAR_AFTER_SECS));
-        let _ = clipboard::clear_if_unchanged(seq);
+        if GENERATION.load(Ordering::SeqCst) == gen {
+            let _ = clipboard::clear_if_unchanged(seq);
+        }
     });
     Ok(clipboard::CLEAR_AFTER_SECS)
 }

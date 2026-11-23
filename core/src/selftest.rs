@@ -44,6 +44,20 @@ pub async fn run(silent: Option<Ipv4Addr>) -> Vec<String> {
     let mut out = Vec::new();
     let lo = Ipv4Addr::LOCALHOST;
     out.push(format!("Echo delle scansioni: {}", motore()));
+    // system DNS configuration (hickory-resolver): read only, no query
+    out.push(match crate::dns::system_dns() {
+        Ok(s) => format!(
+            "DNS di sistema: {} server utilizzabili ({} IPv6), suffisso {}",
+            s.servers.len(),
+            s.servers.iter().filter(|a| a.is_ipv6()).count(),
+            if s.suffix.is_some() {
+                "presente"
+            } else {
+                "assente"
+            }
+        ),
+        Err(e) => format!("DNS di sistema: {e}"),
+    });
 
     let a = icmp::echo(lo, 128, 1000).await;
     let b = icmp::echo_scan(lo, 128, 1000).await;
@@ -201,6 +215,28 @@ mod tests {
         for l in crate::wifi::diagnose() {
             println!("{l}");
         }
+    }
+
+    /// Protected clipboard: copies a dummy text, checks that the sequence number read
+    /// while the clipboard was open is still the current one after closing it (otherwise
+    /// the automatic clearing would never act) and clears it. It replaces what is in the
+    /// clipboard: run it only when that does not matter.
+    #[test]
+    #[ignore = "collaudo manuale: sostituisce il contenuto degli appunti"]
+    fn collaudo_appunti() {
+        use crate::clipboard;
+        let seq = clipboard::copy_secret("ntb-collaudo", 0).expect("copia");
+        println!("Copia protetta: riuscita, numero di sequenza {seq}");
+        let cleared = clipboard::clear_if_unchanged(seq).expect("svuotamento");
+        println!(
+            "Svuotamento automatico: {}",
+            if cleared {
+                "riuscito (numero di sequenza invariato dopo la chiusura)"
+            } else {
+                "NON riuscito: il numero di sequenza è cambiato dopo la chiusura"
+            }
+        );
+        assert!(cleared);
     }
 
     /// Neighbours: passive read of the PC's ARP/NDP table, with the path used

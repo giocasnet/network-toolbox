@@ -108,15 +108,9 @@ pub fn build(root: &[u32], vbs: &[VarBind]) -> Option<Table> {
 }
 
 /// CSV of the table: `;` separator (the one Excel opens by itself in Italian locales),
-/// fields with `;`, quotes or newlines are quoted.
+/// fields with `;`, quotes or newlines are quoted (`util::csv_field`).
 pub fn csv(t: &Table) -> String {
-    let field = |s: &str| {
-        if s.contains([';', '"', '\n', '\r']) {
-            format!("\"{}\"", s.replace('"', "\"\""))
-        } else {
-            s.to_string()
-        }
-    };
+    let field = crate::util::csv_field;
     let mut out = vec![std::iter::once(crate::t!("Indice", "Index").to_string())
         .chain(t.columns.iter().map(|c| field(&c.name)))
         .collect::<Vec<_>>()

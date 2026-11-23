@@ -3,7 +3,7 @@
 use crate::t;
 
 use std::{iter, ptr, thread, time::Duration};
-use windows_sys::Win32::Foundation::{GlobalFree, HANDLE};
+use windows_sys::Win32::Foundation::{GlobalFree, HANDLE, HWND};
 use windows_sys::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardSequenceNumber, OpenClipboard,
     RegisterClipboardFormatW, SetClipboardData,
@@ -32,10 +32,13 @@ impl Drop for Open {
     }
 }
 
-fn open() -> crate::Result<Open> {
+/// `owner` = the app window (0 = none). With an owner, `EmptyClipboard` makes it the
+/// clipboard owner: without one the owner is NULL and Microsoft documents that the
+/// following `SetClipboardData` may fail.
+fn open(owner: isize) -> crate::Result<Open> {
     // Another program may keep it open for a few milliseconds
     for _ in 0..20 {
-        if unsafe { OpenClipboard(ptr::null_mut()) } != 0 {
+        if unsafe { OpenClipboard(owner as HWND) } != 0 {
             return Ok(Open);
         }
         thread::sleep(Duration::from_millis(15));
@@ -86,30 +89,39 @@ fn register(name: &str) -> u32 {
     unsafe { RegisterClipboardFormatW(w.as_ptr()) }
 }
 
-pub fn copy_secret(text: &str) -> crate::Result<u32> {
+pub fn copy_secret(text: &str, owner: isize) -> crate::Result<u32> {
     let utf16: Vec<u8> = text
         .encode_utf16()
         .chain(iter::once(0))
         .flat_map(u16::to_le_bytes)
         .collect();
-    {
-        let _open = open()?;
-        if unsafe { EmptyClipboard() } == 0 {
+    let _open = open(owner)?;
+    if unsafe { EmptyClipboard() } == 0 {
+        return Err(t!(
+            "Impossibile svuotare gli appunti",
+            "Cannot empty the clipboard"
+        )
+        .into());
+    }
+    // The privacy formats first, then the text: if one cannot be set the password is
+    // never placed where the history (Win+V) or the cloud could take it.
+    // DWORD 0 = "do not include".
+    for name in PRIVACY_FORMATS {
+        let f = register(name);
+        if f == 0 || set(f, &0u32.to_le_bytes()).is_err() {
+            unsafe { EmptyClipboard() };
             return Err(t!(
-                "Impossibile svuotare gli appunti",
-                "Cannot empty the clipboard"
+                "Impossibile escludere la password dalla cronologia degli appunti: copia annullata",
+                "Cannot keep the password out of the clipboard history: copy cancelled"
             )
             .into());
         }
-        set(CF_UNICODETEXT, &utf16)?;
-        // DWORD 0 = "do not include"; if a format is not available carry on
-        for name in PRIVACY_FORMATS {
-            let f = register(name);
-            if f != 0 {
-                let _ = set(f, &0u32.to_le_bytes());
-            }
-        }
     }
+    if let Err(e) = set(CF_UNICODETEXT, &utf16) {
+        unsafe { EmptyClipboard() };
+        return Err(e);
+    }
+    // read while the clipboard is still open: nobody else can have changed it yet
     Ok(unsafe { GetClipboardSequenceNumber() })
 }
 
@@ -117,7 +129,7 @@ pub fn clear_if_unchanged(seq: u32) -> crate::Result<bool> {
     if unsafe { GetClipboardSequenceNumber() } != seq {
         return Ok(false);
     }
-    let _open = open()?;
+    let _open = open(0)?;
     if unsafe { GetClipboardSequenceNumber() } != seq {
         return Ok(false);
     }

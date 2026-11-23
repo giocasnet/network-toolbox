@@ -794,13 +794,7 @@ pub fn compare(cur: &mut NeighResult, prev: Option<&NeighResult>) {
 // ───────────────────────── CSV ─────────────────────────
 
 pub fn csv(r: &NeighResult) -> String {
-    let field = |s: &str| {
-        if s.contains([';', '"', '\n', '\r']) {
-            format!("\"{}\"", s.replace('"', "\"\""))
-        } else {
-            s.to_string()
-        }
-    };
+    let field = crate::util::csv_field;
     let mut out = vec![t!(
         "MAC;Produttore;Famiglia;Indirizzo;Ambito;Stato;Scheda;Ruolo",
         "MAC;Vendor;Family;Address;Scope;State;Adapter;Role"

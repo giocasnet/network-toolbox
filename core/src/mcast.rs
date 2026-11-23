@@ -36,12 +36,3 @@ pub fn open(local: Ipv4Addr, multicast: bool) -> std::io::Result<UdpSocket> {
     s.set_nonblocking(true)?;
     UdpSocket::from_std(s.into())
 }
-
-/// CSV field with `;` separator (same convention as the other tools).
-pub fn csv_field(s: &str) -> String {
-    if s.contains([';', '"', '\n', '\r']) {
-        format!("\"{}\"", s.replace('"', "\"\""))
-    } else {
-        s.to_string()
-    }
-}

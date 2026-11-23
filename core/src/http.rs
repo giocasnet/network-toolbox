@@ -11,6 +11,7 @@ use crate::{t, tf, Result};
 use analyze::{check, Check, Cookie, Csp, ERR, INFO, OK, WARN};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 const MAX_REDIRECTS: usize = 6;
@@ -104,6 +105,35 @@ fn client(verify: bool) -> Result<reqwest::Client> {
         .map_err(|e| e.to_string())
 }
 
+/// Why a body was not read in full.
+#[derive(Debug, PartialEq)]
+pub enum BodyError {
+    /// Over the limit (declared by `Content-Length` or actually received)
+    TooLarge,
+    /// The connection dropped or the server stopped sending
+    Interrupted,
+}
+
+/// Reads a response body up to `max` bytes: a declared `Content-Length` over the limit is
+/// refused before reading, and the count of what actually arrives is checked chunk by
+/// chunk, so a large or endless body never ends up whole in memory.
+pub async fn read_body(
+    mut resp: reqwest::Response,
+    max: usize,
+) -> std::result::Result<Vec<u8>, BodyError> {
+    if resp.content_length().is_some_and(|n| n > max as u64) {
+        return Err(BodyError::TooLarge);
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|_| BodyError::Interrupted)? {
+        if body.len() + chunk.len() > max {
+            return Err(BodyError::TooLarge);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
 /// Headers of a response with normalised names; several values of the same header go
 /// on separate lines. Cookie values never leave here.
 fn header_map(h: &reqwest::header::HeaderMap) -> BTreeMap<String, String> {
@@ -130,16 +160,87 @@ struct Chain {
     status: reqwest::StatusCode,
     headers: BTreeMap<String, String>,
     url: reqwest::Url,
+    /// Redirect that was not followed, with the reason (a check for the result)
+    unfollowed: Option<Check>,
+}
+
+/// Addresses that belong to the PC or to a local or private network: loopback, private,
+/// link-local, CGNAT, unique local IPv6, unspecified and broadcast.
+pub fn is_internal(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v) => {
+            let o = v.octets();
+            v.is_loopback()
+                || v.is_private()
+                || v.is_link_local()
+                || v.is_unspecified()
+                || v.is_broadcast()
+                || (o[0] == 100 && (o[1] & 0xc0) == 64)
+        }
+        IpAddr::V6(v) => {
+            if let Some(v4) = v.to_ipv4_mapped() {
+                return is_internal(IpAddr::V4(v4));
+            }
+            let s = v.segments()[0];
+            v.is_loopback()
+                || v.is_unspecified()
+                || (s & 0xfe00) == 0xfc00
+                || (s & 0xffc0) == 0xfe80
+        }
+    }
+}
+
+/// The host of `url` is (or resolves to) an internal address. A name that does not resolve
+/// counts as external: the request will fail anyway.
+async fn host_internal(url: &reqwest::Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return is_internal(ip);
+    }
+    let d = host.trim_end_matches('.').to_ascii_lowercase();
+    if d == "localhost" || d.ends_with(".localhost") {
+        return true;
+    }
+    let port = url.port_or_known_default().unwrap_or(443);
+    let found = tokio::net::lookup_host((d.as_str(), port)).await;
+    match found {
+        Ok(mut addrs) => addrs.any(|a| is_internal(a.ip())),
+        Err(_) => false,
+    }
+}
+
+/// Address of the `http://` probe: only scheme, host and the root path. Path, query,
+/// fragment and credentials of the typed address must not travel in clear text.
+pub fn upgrade_url(url: &reqwest::Url) -> Option<reqwest::Url> {
+    if url.scheme() != "https" || url.port().is_some() {
+        return None;
+    }
+    reqwest::Url::parse(&format!("http://{}/", url.host_str()?)).ok()
 }
 
 async fn chain(
+    url: reqwest::Url,
+    verified: &reqwest::Client,
+    unverified: &reqwest::Client,
+) -> Result<Chain> {
+    // an address typed by the user may be internal; a public site must not lead there by itself
+    let internal_start = host_internal(&url).await;
+    chain_with(url, verified, unverified, internal_start).await
+}
+
+async fn chain_with(
     mut url: reqwest::Url,
     verified: &reqwest::Client,
     unverified: &reqwest::Client,
+    internal_start: bool,
 ) -> Result<Chain> {
     let now = crate::util::now_unix() as i64;
     let mut hops: Vec<Hop> = Vec::new();
     let mut cookies: Vec<Cookie> = Vec::new();
+    let mut unfollowed = None;
     loop {
         let https = url.scheme() == "https";
         // First with the certificate verified; if the connection fails it is retried without
@@ -192,10 +293,36 @@ async fn chain(
                 if hops.len() > MAX_REDIRECTS {
                     return Err(t!("Troppi redirect", "Too many redirects").into());
                 }
-                url = url
+                let next = url
                     .join(loc)
                     .map_err(|_| tf!("Redirect non valido: {loc}", "Invalid redirect: {loc}"))?;
-                continue;
+                let area = t!("Trasporto", "Transport");
+                let name = t!("Redirect non seguito", "Redirect not followed");
+                if transport == "https-invalid" {
+                    // anyone in between may have written the Location header
+                    unfollowed = Some(check(
+                        area,
+                        WARN,
+                        name,
+                        tf!(
+                            "{next}: la risposta che lo indica non è autenticata",
+                            "{next}: the response that points to it is not authenticated"
+                        ),
+                    ));
+                } else if !internal_start && host_internal(&next).await {
+                    unfollowed = Some(check(
+                        area,
+                        WARN,
+                        name,
+                        tf!(
+                            "{next}: porta a un indirizzo locale o privato partendo da un sito pubblico. Per controllarlo, indicalo direttamente",
+                            "{next}: leads to a local or private address from a public site. To check it, enter it directly"
+                        ),
+                    ));
+                } else {
+                    url = next;
+                    continue;
+                }
             }
         }
         return Ok(Chain {
@@ -204,6 +331,7 @@ async fn chain(
             status,
             headers,
             url,
+            unfollowed,
         });
     }
 }
@@ -389,6 +517,7 @@ fn analyze_chain(c: Chain, upgrade: Option<Check>) -> HeadersResult {
     let mut checks: Vec<Check> = Vec::new();
     checks.extend(upgrade);
     checks.extend(transport_checks(&c));
+    checks.extend(c.unfollowed.clone());
 
     // Several CSP headers arrive on separate lines: the first one is analysed
     let policy = |name: &str| {
@@ -463,14 +592,9 @@ pub async fn run(req: HeadersReq) -> Result<HeadersResult> {
     let url = normalize_url(&req.url)?;
     let verified = client(true)?;
     let unverified = client(false)?;
-    // With an https:// address on the standard port, http:// on the same host is also
-    // tried, together with the chain (a single request, without following the redirect).
-    let plain = (url.scheme() == "https" && url.port().is_none())
-        .then(|| {
-            let mut u = url.clone();
-            u.set_scheme("http").ok().map(|_| u)
-        })
-        .flatten();
+    // With an https:// address on the standard port, http://host/ is also tried, together
+    // with the chain (a single request, without following the redirect).
+    let plain = upgrade_url(&url);
     let upgrade = async {
         match &plain {
             Some(u) => Some(http_upgrade(&verified, u).await),
@@ -684,6 +808,32 @@ mod tests {
     /// and the reason the certificate was rejected is reported.
     #[tokio::test]
     async fn certificato_non_valido_segnalato() {
+        let port = serve_tls("HTTP/1.1 200 OK\r\nStrict-Transport-Security: max-age=31536000\r\nX-Content-Type-Options: nosniff\r\nSet-Cookie: sid=SEGRETO; Path=/; HttpOnly\r\nContent-Length: 0\r\n\r\n").await;
+        let r = run(HeadersReq {
+            url: format!("https://localhost:{port}/"),
+        })
+        .await
+        .unwrap();
+        assert_eq!(r.status_code, 200);
+        assert!(!r.authenticated);
+        assert_eq!(r.hops.len(), 1);
+        assert_eq!(r.hops[0].transport, "https-invalid");
+        assert!(!r.hops[0].tls_error.is_empty());
+        let cert = find(&r, "Certificato");
+        assert_eq!(cert.status, ERR);
+        assert!(cert.detail.contains("destinazione"), "{}", cert.detail);
+        // the headers are there and valid, but the UI shows them as unauthenticated
+        assert_eq!(r.hops[0].hsts, Some(true));
+        assert_eq!(find(&r, "HSTS").status, OK);
+        assert_eq!(find(&r, "X-Content-Type-Options").status, OK);
+        // over HTTPS a session without Secure is an error
+        assert_eq!(find(&r, "sid").status, ERR);
+        println!("motivo: {}", r.hops[0].tls_error);
+    }
+
+    /// HTTPS server on 127.0.0.1 with a self-signed certificate for "localhost": every
+    /// request gets `resp`.
+    async fn serve_tls(resp: &'static str) -> u16 {
         use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
         use std::sync::Arc;
         let ck = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
@@ -711,32 +861,126 @@ mod tests {
                     };
                     let mut buf = [0u8; 2048];
                     let _ = t.read(&mut buf).await;
-                    let resp = "HTTP/1.1 200 OK\r\nStrict-Transport-Security: max-age=31536000\r\nX-Content-Type-Options: nosniff\r\nSet-Cookie: sid=SEGRETO; Path=/; HttpOnly\r\nContent-Length: 0\r\n\r\n";
                     let _ = t.write_all(resp.as_bytes()).await;
                     let _ = t.shutdown().await;
                 });
             }
         });
+        port
+    }
+
+    /// The http:// probe carries neither path, query, fragment nor credentials.
+    #[test]
+    fn indirizzo_della_prova_http() {
+        let u = |s: &str| reqwest::Url::parse(s).unwrap();
+        let p = upgrade_url(&u(
+            "https://utente:pw@www.example.com/reset/ABC?token=SEGRETO#x",
+        ));
+        assert_eq!(p.unwrap().as_str(), "http://www.example.com/");
+        assert_eq!(
+            upgrade_url(&u("https://[2001:db8::1]/a?b=c"))
+                .unwrap()
+                .as_str(),
+            "http://[2001:db8::1]/"
+        );
+        assert!(upgrade_url(&u("https://www.example.com:8443/")).is_none());
+        assert!(upgrade_url(&u("http://www.example.com/")).is_none());
+    }
+
+    #[test]
+    fn indirizzi_interni() {
+        for ip in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "172.16.0.1",
+            "192.168.200.7",
+            "169.254.1.1",
+            "100.64.0.1",
+            "0.0.0.0",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:172.16.7.1",
+        ] {
+            assert!(is_internal(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in [
+            "203.0.113.10",
+            "198.51.100.1",
+            "100.128.0.1",
+            "2001:db8::1",
+            "::ffff:203.0.113.1",
+        ] {
+            assert!(!is_internal(ip.parse().unwrap()), "{ip}");
+        }
+    }
+
+    /// A redirect is not followed from an unauthenticated response, nor from a public
+    /// start towards an internal address; from an internal start it is followed.
+    #[tokio::test]
+    async fn redirect_non_seguiti() {
+        let port = serve_tls("HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:9/interno\r\nContent-Length: 0\r\n\r\n").await;
         let r = run(HeadersReq {
             url: format!("https://localhost:{port}/"),
         })
         .await
         .unwrap();
-        assert_eq!(r.status_code, 200);
-        assert!(!r.authenticated);
         assert_eq!(r.hops.len(), 1);
-        assert_eq!(r.hops[0].transport, "https-invalid");
-        assert!(!r.hops[0].tls_error.is_empty());
-        let cert = find(&r, "Certificato");
-        assert_eq!(cert.status, ERR);
-        assert!(cert.detail.contains("destinazione"), "{}", cert.detail);
-        // the headers are there and valid, but the UI shows them as unauthenticated
-        assert_eq!(r.hops[0].hsts, Some(true));
-        assert_eq!(find(&r, "HSTS").status, OK);
-        assert_eq!(find(&r, "X-Content-Type-Options").status, OK);
-        // over HTTPS a session without Secure is an error
-        assert_eq!(find(&r, "sid").status, ERR);
-        println!("motivo: {}", r.hops[0].tls_error);
+        let c = find(&r, "Redirect non seguito");
+        assert_eq!(c.status, WARN);
+        assert!(c.detail.contains("non è autenticata"), "{}", c.detail);
+
+        let target = serve(|_| "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".into()).await;
+        let start = serve(move |_| {
+            format!("HTTP/1.1 301 Moved\r\nLocation: http://127.0.0.1:{target}/\r\nContent-Length: 0\r\n\r\n")
+        })
+        .await;
+        let url = reqwest::Url::parse(&format!("http://127.0.0.1:{start}/")).unwrap();
+        let (v, u) = (client(true).unwrap(), client(false).unwrap());
+        // as if the start were a public site
+        let c = chain_with(url.clone(), &v, &u, false).await.unwrap();
+        assert_eq!(c.hops.len(), 1);
+        let chk = c.unfollowed.unwrap();
+        assert!(chk.detail.contains("locale o privato"), "{}", chk.detail);
+        // internal start: followed
+        let c = chain_with(url, &v, &u, true).await.unwrap();
+        assert_eq!(c.hops.len(), 2);
+        assert!(c.unfollowed.is_none());
+        // English
+        let _g = crate::i18n::scoped(crate::i18n::Lang::En);
+        let url = reqwest::Url::parse(&format!("http://127.0.0.1:{start}/")).unwrap();
+        let c = chain_with(url, &v, &u, false).await.unwrap();
+        let chk = c.unfollowed.unwrap();
+        assert_eq!(chk.name, "Redirect not followed");
+        assert!(chk.detail.contains("local or private address"));
+        assert!(!chk.detail.contains("privato"));
+    }
+
+    /// Declared size over the limit, body that grows beyond it without a declared size,
+    /// body within the limit.
+    #[tokio::test]
+    async fn corpo_con_limite() {
+        let port = serve(|line| {
+            if line.starts_with("GET /grande ") {
+                "HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n".into()
+            } else if line.starts_with("GET /senza ") {
+                format!(
+                    "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{}",
+                    "x".repeat(5000)
+                )
+            } else {
+                "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".into()
+            }
+        })
+        .await;
+        let c = client(true).unwrap();
+        let get = |p: &str| c.get(format!("http://127.0.0.1:{port}{p}")).send();
+        let r = get("/grande").await.unwrap();
+        assert_eq!(read_body(r, 1024).await, Err(BodyError::TooLarge));
+        let r = get("/senza").await.unwrap();
+        assert_eq!(read_body(r, 1024).await, Err(BodyError::TooLarge));
+        let r = get("/").await.unwrap();
+        assert_eq!(read_body(r, 1024).await.unwrap(), b"ok");
     }
 
     #[test]
@@ -762,6 +1006,7 @@ mod tests {
             status: reqwest::StatusCode::OK,
             headers: BTreeMap::new(),
             url: reqwest::Url::parse("http://www.example.com/").unwrap(),
+            unfollowed: None,
         };
         let r = analyze_chain(c, None);
         let t = find(&r, "Transport");

@@ -172,10 +172,10 @@ impl Lookup for System {
         let mut out = Vec::new();
         for t in [RecordType::A, RecordType::AAAA] {
             if let Ok((m, _, _)) = dns::query_any(name, t, &self.servers).await {
-                for r in m.answers() {
-                    match r.data() {
-                        Some(RData::A(a)) => out.push(IpAddr::V4(a.0)),
-                        Some(RData::AAAA(a)) => out.push(IpAddr::V6(a.0)),
+                for r in m.answers {
+                    match &r.data {
+                        RData::A(a) => out.push(IpAddr::V4(a.0)),
+                        RData::AAAA(a) => out.push(IpAddr::V6(a.0)),
                         _ => {}
                     }
                 }
@@ -229,13 +229,16 @@ impl Lookup for System {
                 resp.status().as_u16()
             ));
         }
-        let body = resp
-            .bytes()
+        let body = crate::http::read_body(resp, 64 * 1024)
             .await
-            .map_err(|_| t!("risposta interrotta", "response interrupted").to_string())?;
-        if body.len() > 64 * 1024 {
-            return Err(t!("policy troppo grande", "policy too large").into());
-        }
+            .map_err(|e| match e {
+                crate::http::BodyError::TooLarge => {
+                    t!("policy troppo grande", "policy too large").to_string()
+                }
+                crate::http::BodyError::Interrupted => {
+                    t!("risposta interrotta", "response interrupted").to_string()
+                }
+            })?;
         Ok(String::from_utf8_lossy(&body).into_owned())
     }
 }

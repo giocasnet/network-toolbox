@@ -14,8 +14,9 @@
 //! fake responder on 127.0.0.1.
 
 use crate::http::analyze::{check, Check};
-use crate::mcast::{csv_field, local_v4, open};
+use crate::mcast::{local_v4, open};
 use crate::ping::Stop;
+use crate::util::csv_field;
 use crate::{t, tf};
 use hickory_proto::op::{Message, MessageType, OpCode, Query};
 use hickory_proto::rr::{Name, RData, RecordType};
@@ -32,6 +33,19 @@ const META: &str = "_services._dns-sd._udp.local.";
 /// The questions are repeated every `RESEND` ticks (the rest only when something new arrives).
 const RESEND: u32 = 4;
 const AREA: &str = "Bonjour";
+/// Limits of one search: whatever the devices announce, memory and work stay bounded.
+const MAX_INSTS: usize = 1024;
+const MAX_TYPES: usize = 256;
+const MAX_HOSTS: usize = 1024;
+const MAX_ADDRS: usize = 16;
+const MAX_TXT: usize = 32;
+const MAX_SENDERS: usize = 1024;
+/// Records accepted from one address in a search.
+const MAX_PER_SENDER: usize = 4096;
+/// Questions sent in one round.
+const MAX_QUERIES: usize = 128;
+/// Datagrams waiting to be read: beyond this they are dropped, as UDP would.
+const QUEUE: usize = 512;
 
 // ───────────────────────── request and response ─────────────────────────
 
@@ -110,6 +124,10 @@ pub(crate) struct Book {
     /// host key → (name, addresses)
     hosts: BTreeMap<String, (Name, BTreeSet<IpAddr>)>,
     responders: BTreeSet<IpAddr>,
+    /// records accepted per address
+    per_sender: BTreeMap<IpAddr, usize>,
+    /// a limit was reached: the result is partial
+    capped: bool,
 }
 
 fn key(n: &Name) -> String {
@@ -162,7 +180,12 @@ fn trim_dot(n: &Name) -> String {
 impl Book {
     fn inst(&mut self, name: &Name, from: IpAddr) -> Option<&mut Inst> {
         let (label, kind) = split_instance(name)?;
-        let i = self.insts.entry(key(name)).or_default();
+        let k = key(name);
+        if !self.insts.contains_key(&k) && self.insts.len() >= MAX_INSTS {
+            self.capped = true;
+            return None;
+        }
+        let i = self.insts.entry(k).or_default();
         if i.fqdn.is_none() {
             i.fqdn = Some(name.clone());
             i.label = label;
@@ -174,31 +197,40 @@ impl Book {
 
     /// Takes the records of a response. `true` if something new was learnt.
     pub(crate) fn ingest(&mut self, m: &Message, from: IpAddr) -> bool {
-        if m.message_type() != MessageType::Response {
+        if m.metadata.message_type != MessageType::Response {
+            return false;
+        }
+        if !self.responders.contains(&from) && self.responders.len() >= MAX_SENDERS {
+            self.capped = true;
             return false;
         }
         self.responders.insert(from);
+        let mut seen = self.per_sender.get(&from).copied().unwrap_or(0);
         let mut changed = false;
-        for r in m
-            .answers()
-            .iter()
-            .chain(m.additionals())
-            .chain(m.name_servers())
-        {
+        for r in m.answers.iter().chain(&m.additionals).chain(&m.authorities) {
             // TTL 0 = goodbye
-            if r.ttl() == 0 {
+            if r.ttl == 0 {
                 continue;
             }
-            let Some(data) = r.data() else { continue };
+            if seen >= MAX_PER_SENDER {
+                self.capped = true;
+                break;
+            }
+            seen += 1;
+            let data = &r.data;
             match data {
                 RData::PTR(p) => {
                     let target = &p.0;
-                    if key(r.name()) == META {
+                    if key(&r.name) == META {
                         if let Some(kind) = split_type(target) {
-                            changed |= self.types.insert(kind, target.clone()).is_none();
+                            if self.types.contains_key(&kind) || self.types.len() < MAX_TYPES {
+                                changed |= self.types.insert(kind, target.clone()).is_none();
+                            } else {
+                                self.capped = true;
+                            }
                         }
                     } else if let (Some(kind), Some((_, k2))) =
-                        (split_type(r.name()), split_instance(target))
+                        (split_type(&r.name), split_instance(target))
                     {
                         if kind == k2 {
                             let before = self.insts.len();
@@ -208,39 +240,50 @@ impl Book {
                     }
                 }
                 RData::SRV(s) => {
-                    if let Some(i) = self.inst(r.name(), from) {
+                    if let Some(i) = self.inst(&r.name, from) {
                         changed |= !i.has_srv;
                         i.has_srv = true;
-                        i.host = Some(s.target().clone());
-                        i.port = s.port();
+                        i.host = Some(s.target.clone());
+                        i.port = s.port;
                     }
                 }
                 RData::TXT(x) => {
-                    if let Some(i) = self.inst(r.name(), from) {
+                    if let Some(i) = self.inst(&r.name, from) {
                         changed |= !i.has_txt;
                         i.has_txt = true;
                         i.txt = x
-                            .txt_data()
+                            .txt_data
                             .iter()
                             .map(|b| label_str(b))
                             .filter(|s| !s.is_empty())
+                            .take(MAX_TXT)
                             .collect();
                     }
                 }
-                RData::A(a) => changed |= self.addr(r.name(), IpAddr::V4(a.0)),
-                RData::AAAA(a) => changed |= self.addr(r.name(), IpAddr::V6(a.0)),
+                RData::A(a) => changed |= self.addr(&r.name, IpAddr::V4(a.0)),
+                RData::AAAA(a) => changed |= self.addr(&r.name, IpAddr::V6(a.0)),
                 _ => {}
             }
         }
+        self.per_sender.insert(from, seen);
         changed
     }
 
     fn addr(&mut self, name: &Name, ip: IpAddr) -> bool {
-        self.hosts
-            .entry(key(name))
+        let k = key(name);
+        if !self.hosts.contains_key(&k) && self.hosts.len() >= MAX_HOSTS {
+            self.capped = true;
+            return false;
+        }
+        let set = &mut self
+            .hosts
+            .entry(k)
             .or_insert_with(|| (name.clone(), BTreeSet::new()))
-            .1
-            .insert(ip)
+            .1;
+        if !set.contains(&ip) && set.len() >= MAX_ADDRS {
+            return false;
+        }
+        set.insert(ip)
     }
 
     /// Questions still worth asking.
@@ -271,17 +314,14 @@ impl Book {
             q.push((h.clone(), RecordType::A));
             q.push((h, RecordType::AAAA));
         }
+        q.truncate(MAX_QUERIES);
         q
     }
 }
 
 fn packet(name: Name, rtype: RecordType) -> Option<Vec<u8>> {
-    let mut m = Message::new();
-    m.set_id(0x4e54)
-        .set_message_type(MessageType::Query)
-        .set_op_code(OpCode::Query)
-        .set_recursion_desired(false)
-        .add_query(Query::query(name, rtype));
+    let mut m = Message::new(0x4e54, MessageType::Query, OpCode::Query);
+    m.add_query(Query::query(name, rtype));
     m.to_vec().ok()
 }
 
@@ -494,6 +534,17 @@ pub(crate) fn checks(book: &Book, r: &BonjourResult) -> Vec<Check> {
             ));
         }
     }
+    if book.capped {
+        c.push(check(
+            AREA,
+            "warn",
+            t!("Risultato parziale", "Partial result"),
+            t!(
+                "Le risposte hanno superato i limiti di una ricerca (servizi, host, indirizzi o record per dispositivo): l'elenco non è completo. Un dispositivo che annuncia migliaia di servizi va verificato.",
+                "The replies exceeded the limits of one search (services, hosts, addresses or records per device): the list is not complete. A device announcing thousands of services should be checked."
+            ),
+        ));
+    }
     let nosrv = book.insts.values().filter(|i| !i.has_srv).count();
     if nosrv > 0 {
         c.push(check(
@@ -610,7 +661,7 @@ pub(crate) async fn run_with(dur: Duration, env: Env, stop: &Stop) -> crate::Res
         )
         .to_string());
     }
-    let (tx, mut rx) = mpsc::unbounded_channel::<(Vec<u8>, SocketAddr)>();
+    let (tx, mut rx) = mpsc::channel::<(Vec<u8>, SocketAddr)>(QUEUE);
     let mut readers = JoinSet::new();
     for s in &socks {
         let (s, tx) = (s.clone(), tx.clone());
@@ -619,7 +670,10 @@ pub(crate) async fn run_with(dur: Duration, env: Env, stop: &Stop) -> crate::Res
             loop {
                 match s.recv_from(&mut buf).await {
                     Ok((n, from)) => {
-                        if tx.send((buf[..n].to_vec(), from)).is_err() {
+                        // queue full: the datagram is dropped
+                        if let Err(mpsc::error::TrySendError::Closed(_)) =
+                            tx.try_send((buf[..n].to_vec(), from))
+                        {
                             break;
                         }
                     }
@@ -716,8 +770,7 @@ mod tests {
     }
 
     fn response(records: Vec<(&str, RData)>) -> Message {
-        let mut m = Message::new();
-        m.set_message_type(MessageType::Response);
+        let mut m = Message::response(0, OpCode::Query);
         for (n, d) in records {
             m.add_answer(Record::from_rdata(name(n), 10, d));
         }
@@ -793,11 +846,55 @@ mod tests {
             .contains("printer1.local;192.0.2.10 2001:db8::10;Office printer;_ipp._tcp"));
     }
 
+    /// A device announcing thousands of services: the book stops at its limits, the
+    /// questions per round stay bounded and the result says it is partial.
+    #[test]
+    fn limits_of_a_search() {
+        let mut b = Book::default();
+        let from: IpAddr = "192.0.2.10".parse().unwrap();
+        let many: Vec<(String, RData)> = (0..MAX_INSTS + 200)
+            .map(|i| {
+                (
+                    "_ipp._tcp.local.".to_string(),
+                    RData::PTR(PTR(name(&format!("P{i}._ipp._tcp.local.")))),
+                )
+            })
+            .collect();
+        let m = response(many.iter().map(|(n, d)| (n.as_str(), d.clone())).collect());
+        assert!(b.ingest(&m, from));
+        assert_eq!(b.insts.len(), MAX_INSTS);
+        assert!(b.capped);
+        assert!(b.queries().len() <= MAX_QUERIES);
+        let r = build(&b, 1, 5);
+        assert!(r.checks.iter().any(|c| c.name == "Risultato parziale"));
+
+        // records per sender
+        let mut b = Book::default();
+        let big: Vec<(String, RData)> = (0..MAX_PER_SENDER + 10)
+            .map(|i| {
+                (
+                    "h.local.".to_string(),
+                    RData::A(A::from(Ipv4Addr::from(0xc000_0200u32 + i as u32))),
+                )
+            })
+            .collect();
+        let m = response(big.iter().map(|(n, d)| (n.as_str(), d.clone())).collect());
+        b.ingest(&m, from);
+        assert!(b.capped);
+        assert_eq!(b.per_sender[&from], MAX_PER_SENDER);
+        // addresses per host
+        assert_eq!(b.hosts["h.local."].1.len(), MAX_ADDRS);
+
+        let _g = crate::i18n::scoped(crate::i18n::Lang::En);
+        let r = build(&b, 1, 5);
+        assert!(r.checks.iter().any(|c| c.name == "Partial result"));
+        assert!(!r.checks.iter().any(|c| c.name == "Risultato parziale"));
+    }
+
     #[test]
     fn goodbye_records_and_queries_are_ignored() {
         let mut b = Book::default();
-        let mut bye = Message::new();
-        bye.set_message_type(MessageType::Response);
+        let mut bye = Message::response(0, OpCode::Query);
         bye.add_answer(Record::from_rdata(
             name(META),
             0,
@@ -805,7 +902,7 @@ mod tests {
         ));
         assert!(!b.ingest(&bye, "192.0.2.1".parse().unwrap()));
         let mut q = response(printer());
-        q.set_message_type(MessageType::Query);
+        q.metadata.message_type = MessageType::Query;
         assert!(!b.ingest(&q, "192.0.2.1".parse().unwrap()));
         assert!(b.insts.is_empty() && b.types.is_empty());
     }
@@ -902,8 +999,8 @@ mod tests {
                 let Ok(q) = Message::from_vec(&buf[..n]) else {
                     continue;
                 };
-                let qn = plain(q.queries()[0].name());
-                let rt = q.queries()[0].query_type();
+                let qn = plain(q.queries[0].name());
+                let rt = q.queries[0].query_type();
                 let mut rs: Vec<(&str, RData)> = Vec::new();
                 let all = printer();
                 match (qn.as_str(), rt) {
@@ -922,7 +1019,7 @@ mod tests {
                     continue;
                 }
                 let mut m = response(rs);
-                m.add_query(q.queries()[0].clone());
+                m.add_query(q.queries[0].clone());
                 let _ = udp.send_to(&m.to_vec().unwrap(), from).await;
             }
         });

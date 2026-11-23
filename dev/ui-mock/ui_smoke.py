@@ -1,7 +1,7 @@
 """UI test with simulated Tauri IPC (headless Chromium).
 Usage: python -E -P dev/ui-mock/ui_smoke.py [ui folder] [screenshot folder]
 (not -I: it excludes packages installed with --user, where Playwright lives)
-The expected version (2.3.0) must be updated at every release."""
+The expected version (2.4.0) must be updated at every release."""
 import sys, pathlib, threading, functools, http.server
 from playwright.sync_api import sync_playwright
 
@@ -23,7 +23,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
   core: { Channel, invoke: async (cmd, args) => {
   window.__calls.push([cmd, JSON.parse(JSON.stringify(args && args.req || {}))]);
   if (cmd === 'set_lang') { window.__lang = args.lang; return null; }
-  if (cmd === 'app_info') return {hostname:'SRV01.corp.example', ip:'172.16.7.42', version:'2.3.0', os:'windows'};
+  if (cmd === 'app_info') return {hostname:'SRV01.corp.example', ip:'172.16.7.42', version:'2.4.0', os:'windows'};
   if (cmd === 'internet_check') return window.__online ? {online:true, target:'1.1.1.1', rtt_ms:12.3, local_ip:'172.16.7.42'} : {online:false, target:null, rtt_ms:null};
   // "Ferma" (Stop): interrupts the running test of the same tool
   if (cmd === 'ping_stop' || cmd === 'traceroute_stop') { const f = window.__probe[cmd.replace('_stop', '')]; if (f) f(); return null; }
@@ -817,7 +817,7 @@ with sync_playwright() as p:
         # startup: home screen, no menu item selected
         assert pg.locator('#view-home').is_visible(), 'home non visibile'
         assert pg.locator('.nav-item[aria-current]').count() == 0
-        assert pg.inner_text('#home-version') == '2.3.0'
+        assert pg.inner_text('#home-version') == '2.4.0'
         assert pg.get_attribute('.topbar .brand', 'title') == 'SRV01.corp.example · 172.16.7.42'
         assert pg.locator('#brand-host').count() == 0 and 'App desktop' not in pg.inner_text('.topbar')
         assert pg.evaluate("document.querySelector('.topbar').getBoundingClientRect().height") == 40
@@ -861,7 +861,7 @@ with sync_playwright() as p:
         assert pg.evaluate("""Promise.all(['home-map.webp', 'home-ground.webp'].map(u => new Promise(ok => {
           const i = new Image(); i.onload = () => ok(i.naturalWidth > 1000); i.onerror = () => ok(false); i.src = u; }))).then(r => r.every(Boolean))""")
         cr = pg.inner_text('.side-credits')
-        assert 'Versione 2.3.0' in cr and '© 2026 Giorgio Casciola' in cr and 'Apache 2.0' in cr, cr
+        assert 'Versione 2.4.0' in cr and '© 2026 Giorgio Casciola' in cr and 'Apache 2.0' in cr, cr
         for w, h in ((1000, 640), (1920, 1080), (1269, 700)):
             pg.set_viewport_size({'width': w, 'height': h}); pg.wait_for_timeout(100)
             home_layout(pg, theme)

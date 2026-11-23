@@ -24,7 +24,8 @@ use std::time::{Duration, Instant};
 pub const WALK_MAX: usize = 10_000;
 pub const WALK_TIME: Duration = Duration::from_secs(60);
 
-#[derive(Debug, Default, Deserialize)]
+/// Holds community and passwords: `Debug` hides them (see below).
+#[derive(Default, Deserialize)]
 pub struct SnmpReq {
     pub host: String,
     #[serde(default)]
@@ -51,6 +52,27 @@ pub struct SnmpReq {
     /// UDP port of the agent (default 161).
     #[serde(default, deserialize_with = "crate::util::opt_u32")]
     pub port: Option<u32>,
+}
+
+/// Written by hand: community and passwords never appear, only whether they are set.
+impl std::fmt::Debug for SnmpReq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let hidden = |v: &Option<String>| v.as_ref().map(|_| "(nascosto)");
+        f.debug_struct("SnmpReq")
+            .field("host", &self.host)
+            .field("oid", &self.oid)
+            .field("version", &self.version)
+            .field("mode", &self.mode)
+            .field("community", &hidden(&self.community))
+            .field("user", &self.user)
+            .field("sec_level", &self.sec_level)
+            .field("auth_proto", &self.auth_proto)
+            .field("auth_pass", &hidden(&self.auth_pass))
+            .field("priv_proto", &self.priv_proto)
+            .field("priv_pass", &hidden(&self.priv_pass))
+            .field("port", &self.port)
+            .finish()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -558,6 +580,28 @@ pub async fn run(req: SnmpReq, stop: &Stop) -> Result<SnmpResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Community and passwords never appear in the debug text, also inside the requests
+    /// that contain the SNMP one.
+    #[test]
+    fn debug_senza_segreti() {
+        let r = SnmpReq {
+            host: "srv01.corp.example".into(),
+            community: Some("SEGRETO-C".into()),
+            auth_pass: Some("SEGRETO-A".into()),
+            priv_pass: Some("SEGRETO-P".into()),
+            user: Some("monitor".into()),
+            ..Default::default()
+        };
+        let d = format!("{r:?}");
+        assert!(!d.contains("SEGRETO"), "{d}");
+        assert!(d.contains("srv01.corp.example") && d.contains("monitor"));
+        let dev = device::DeviceReq {
+            snmp: r,
+            ..Default::default()
+        };
+        assert!(!format!("{dev:?}").contains("SEGRETO"));
+    }
 
     fn statuses(sec: &Security) -> Vec<(&'static str, String)> {
         security_checks(sec)

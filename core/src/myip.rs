@@ -31,7 +31,22 @@ async fn get(url: &str) -> Result<serde_json::Value> {
             resp.status().as_u16()
         ));
     }
-    resp.json().await.map_err(|e| {
+    // a few hundred bytes are expected: 64 KiB is plenty
+    let body = crate::http::read_body(resp, 64 * 1024)
+        .await
+        .map_err(|e| match e {
+            crate::http::BodyError::TooLarge => crate::t!(
+                "Risposta di ipinfo.io troppo grande",
+                "Response from ipinfo.io too large"
+            )
+            .to_string(),
+            crate::http::BodyError::Interrupted => crate::t!(
+                "Risposta di ipinfo.io interrotta",
+                "Response from ipinfo.io interrupted"
+            )
+            .to_string(),
+        })?;
+    serde_json::from_slice(&body).map_err(|e| {
         crate::tf!(
             "Risposta di ipinfo.io non valida: {e}",
             "Invalid response from ipinfo.io: {e}"

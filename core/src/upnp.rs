@@ -13,8 +13,9 @@
 //! `build` and `checks` are pure functions.
 
 use crate::http::analyze::{check, Check};
-use crate::mcast::{csv_field, local_v4, open};
+use crate::mcast::{local_v4, open};
 use crate::ping::Stop;
+use crate::util::csv_field;
 use crate::{t, tf};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -33,6 +34,11 @@ const MAX_XML: usize = 256 * 1024;
 const FETCH_PARALLEL: usize = 8;
 /// Devices described at most (the rest is listed without description).
 const MAX_DESCRIBE: usize = 64;
+/// Limits of one search: whatever the devices answer, memory stays bounded.
+const MAX_FOUND: usize = 512;
+const MAX_PER_FOUND: usize = 32;
+/// Datagrams waiting to be read: beyond this they are dropped, as UDP would.
+const QUEUE: usize = 512;
 
 // ───────────────────────── request and response ─────────────────────────
 
@@ -145,6 +151,8 @@ struct Found {
 pub(crate) struct Book {
     /// location (or USN if missing) → what answered
     found: BTreeMap<String, Found>,
+    /// a limit was reached: the result is partial
+    capped: bool,
 }
 
 impl Book {
@@ -155,18 +163,25 @@ impl Book {
         } else {
             r.location.clone()
         };
+        if !self.found.contains_key(&k) && self.found.len() >= MAX_FOUND {
+            self.capped = true;
+            return false;
+        }
         let f = self.found.entry(k).or_default();
-        let mut changed = f.from.insert(from);
+        let mut changed = false;
+        if f.from.len() < MAX_PER_FOUND {
+            changed |= f.from.insert(from);
+        }
         if f.server.is_empty() {
             f.server = r.server;
         }
         if f.location.is_empty() {
             f.location = r.location;
         }
-        if !r.st.is_empty() {
+        if !r.st.is_empty() && f.targets.len() < MAX_PER_FOUND {
             changed |= f.targets.insert(r.st);
         }
-        if !r.usn.is_empty() {
+        if !r.usn.is_empty() && f.usn.len() < MAX_PER_FOUND {
             changed |= f.usn.insert(r.usn);
         }
         changed
@@ -633,7 +648,7 @@ pub(crate) async fn run_with(dur: Duration, env: Env, stop: &Stop) -> crate::Res
         )
         .to_string());
     }
-    let (tx, mut rx) = mpsc::unbounded_channel::<(Vec<u8>, SocketAddr)>();
+    let (tx, mut rx) = mpsc::channel::<(Vec<u8>, SocketAddr)>(QUEUE);
     let mut readers = JoinSet::new();
     for s in &socks {
         let (s, tx) = (s.clone(), tx.clone());
@@ -642,7 +657,10 @@ pub(crate) async fn run_with(dur: Duration, env: Env, stop: &Stop) -> crate::Res
             loop {
                 match s.recv_from(&mut buf).await {
                     Ok((n, from)) => {
-                        if tx.send((buf[..n].to_vec(), from)).is_err() {
+                        // queue full: the datagram is dropped
+                        if let Err(mpsc::error::TrySendError::Closed(_)) =
+                            tx.try_send((buf[..n].to_vec(), from))
+                        {
                             break;
                         }
                     }
@@ -712,12 +730,37 @@ pub(crate) async fn run_with(dur: Duration, env: Env, stop: &Stop) -> crate::Res
             (k, fetch(&client, &loc, &from).await)
         });
     }
+    // the stop also interrupts the descriptions: the devices already heard stay in the list
     let mut described = BTreeMap::new();
-    while let Some(Ok((k, r))) = jobs.join_next().await {
-        described.insert(k, r);
+    loop {
+        tokio::select! {
+            j = jobs.join_next() => match j {
+                Some(Ok((k, r))) => {
+                    described.insert(k, r);
+                }
+                Some(Err(_)) => {}
+                None => break,
+            },
+            _ = &mut stopper, if !stopped => {
+                stopped = true;
+                jobs.abort_all();
+                break;
+            }
+        }
     }
     let mut r = build(&book, &described, socks.len(), dur.as_secs());
     r.stopped = stopped;
+    if book.capped {
+        r.checks.push(check(
+            AREA,
+            "warn",
+            t!("Risultato parziale", "Partial result"),
+            t!(
+                "Le risposte hanno superato i limiti di una ricerca: l'elenco non è completo. Un dispositivo che risponde con centinaia di indirizzi diversi va verificato.",
+                "The replies exceeded the limits of one search: the list is not complete. A device answering with hundreds of different addresses should be checked."
+            ),
+        ));
+    }
     if stopped {
         if r.devices.is_empty() {
             r.checks = vec![check(
@@ -781,6 +824,34 @@ mod tests {
         assert!(parse_response(b"M-SEARCH * HTTP/1.1\r\n\r\n").is_none());
         assert!(parse_response(b"HTTP/1.1 200 OK\r\n\r\n").is_none());
         assert!(parse_response(&[0xff, 0xfe, 0x00]).is_none());
+    }
+
+    /// Hundreds of different locations: the book stops at its limit.
+    #[test]
+    fn limits_of_a_search() {
+        let mut b = Book::default();
+        let from: IpAddr = "192.0.2.1".parse().unwrap();
+        for i in 0..MAX_FOUND + 50 {
+            let r = parse_response(&reply(
+                &format!("http://192.0.2.1:5000/d{i}.xml"),
+                "upnp:rootdevice",
+            ))
+            .unwrap();
+            b.ingest(r, from);
+        }
+        assert_eq!(b.found.len(), MAX_FOUND);
+        assert!(b.capped);
+        // targets of one device
+        let mut b = Book::default();
+        for i in 0..MAX_PER_FOUND + 5 {
+            let r = parse_response(&reply("http://192.0.2.1:5000/d.xml", &format!("urn:x:{i}")))
+                .unwrap();
+            b.ingest(r, from);
+        }
+        assert_eq!(
+            b.found.values().next().unwrap().targets.len(),
+            MAX_PER_FOUND
+        );
     }
 
     #[test]

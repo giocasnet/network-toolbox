@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.4.0 — 23 Nov 2026 — security fixes
+- **HTTP headers**: the `http://` probe that checks the redirect to HTTPS now asks only for
+  `http://host/`. Before, it repeated the whole typed address in clear text, path and query
+  included (signed links, reset tokens).
+- **HTTP headers**: a redirect is no longer followed from a response obtained with an invalid
+  certificate, nor from a public site towards a local or private address. The result shows the
+  redirect that was not followed; an internal address can still be checked by entering it.
+- **DNS, Email, Bonjour**: `hickory-proto` and `hickory-resolver` updated to 0.26.3. The DNS
+  message parser of 0.24 could reserve memory out of proportion to a small response
+  (RUSTSEC-2026-0491); the app parses the replies of the queried DNS server and the Bonjour
+  datagrams with it. `url` updated to 2.5.9 (RUSTSEC-2026-0592).
+- **CSV**: every "Copy CSV" (Neighbours, Bonjour, UPnP, SNMP, Wi-Fi) now marks with a leading `'`
+  the text that a spreadsheet would read as a formula (`=`, `+`, `-`, `@`...): SSIDs, device names
+  and SNMP values come from the network. Numbers stay numbers.
+- **Bonjour and UPnP**: limits on queued datagrams, services, hosts, addresses and records per
+  device; beyond them the result says it is partial. The follow-up questions of a Bonjour round are
+  bounded. In UPnP the Stop button also interrupts the download of the descriptions.
+- **Email (MTA-STS)** and **public IP**: the response is read with its size limit checked while it
+  arrives, not after the whole download.
+- **Password generator**: the protected copy opens the clipboard with the app window as owner,
+  refuses the copy if the formats that keep it out of the clipboard history cannot be set, and
+  reads the clipboard sequence number before closing it. Only the timer of the last copy clears
+  the clipboard.
+- SNMP requests no longer show the community and passwords in their debug form.
+
 ## 2.3.0 — 23 Nov 2026 — Bonjour and UPnP in Local network
 - **Local network, Bonjour tab**: browser for the services announced with mDNS / DNS-SD
   (printers, AirPlay, SMB, SSH, web interfaces...). It enumerates every service type, then reads

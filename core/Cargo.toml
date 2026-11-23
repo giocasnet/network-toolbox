@@ -21,8 +21,8 @@ serde_json = "1"
 getrandom = "0.2"
 # DNS: message building and parsing (direct queries to any server) and
 # reading the system DNS configuration (servers and search suffixes)
-hickory-proto = { version = "0.24", default-features = false }
-hickory-resolver = { version = "0.24", default-features = false, features = ["system-config", "tokio-runtime"] }
+hickory-proto = { version = "0.26", default-features = false, features = ["std"] }
+hickory-resolver = { version = "0.26", default-features = false, features = ["system-config"] }
 # HTTP: on Windows uses SChannel and the Windows certificate store
 reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json"] }
 # TLS: handshake with rustls ("ring" crypto: on Windows the MSVC compiler is enough),

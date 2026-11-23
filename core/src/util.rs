@@ -40,9 +40,47 @@ pub fn fmt_pct(v: f64) -> String {
     }
 }
 
+/// CSV field with the `;` separator (the one Excel opens by itself in Italian locales).
+/// Fields with `;`, quotes or line breaks are quoted. Text that a spreadsheet would read
+/// as a formula (it starts with `=`, `+`, `-`, `@`, a tab or a carriage return, also in
+/// the full-width forms) gets a leading `'`: SSIDs, device names and SNMP values come
+/// from the network. Numbers such as `-42` stay numbers.
+pub fn csv_field(s: &str) -> String {
+    let formula = s.starts_with(['=', '+', '-', '@', '\t', '\r', '＝', '＋', '－', '＠'])
+        && s.trim().parse::<f64>().is_err();
+    let s = if formula {
+        format!("'{s}")
+    } else {
+        s.to_string()
+    };
+    if s.contains([';', '"', '\n', '\r']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn campi_csv() {
+        assert_eq!(csv_field("abc"), "abc");
+        assert_eq!(csv_field("a;b"), "\"a;b\"");
+        assert_eq!(csv_field("di \"x\""), "\"di \"\"x\"\"\"");
+        assert_eq!(csv_field("=HYPERLINK(\"x\")"), "\"'=HYPERLINK(\"\"x\"\")\"");
+        assert_eq!(csv_field("+cmd|' /C calc'!A0"), "'+cmd|' /C calc'!A0");
+        assert_eq!(csv_field("@SUM(A1)"), "'@SUM(A1)");
+        assert_eq!(csv_field("-2+3"), "'-2+3");
+        assert_eq!(csv_field("\t=1"), "'\t=1");
+        assert_eq!(csv_field("＝1+1"), "'＝1+1");
+        // numbers stay numbers
+        assert_eq!(csv_field("-42"), "-42");
+        assert_eq!(csv_field("+3.5"), "+3.5");
+        assert_eq!(csv_field("-"), "'-");
+        assert_eq!(csv_field(""), "");
+    }
 
     #[derive(Deserialize)]
     struct T {

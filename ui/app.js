@@ -54,6 +54,14 @@ const tauriError = e => String(e && e.message || e).replace(/^invalid args `req`
 const $ = id => document.getElementById(id);
 const val = id => $(id).value.trim();
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+/* CSV field (';' separator), same rule as util::csv_field in the backend: text that a spreadsheet
+   would read as a formula gets a leading ', numbers such as -42 stay numbers */
+const csvCell = v => {
+  let s = String(v ?? '');
+  const t = s.trim();
+  if (/^[=+\-@\t\r＝＋－＠]/.test(s) && !(t !== '' && Number.isFinite(Number(t)))) s = "'" + s;
+  return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
 
 /* ── theme (button in the top bar) ── */
 const themeBtn = $('theme-btn');
@@ -2274,9 +2282,8 @@ $('wf-nets').addEventListener('click', e => {
   if (c){ wf.filter = c.dataset.wf; wifiNets(); return; }
   if (e.target.closest('#wf-csv')){
     const head = __('segnale_dbm;ssid;nascosta;bssid;produttore;banda_ghz;canale;larghezza_mhz;standard;sicurezza;cifratura;k;v;r;mlo;client;carico_pct');
-    const q = v => /[;"\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v ?? '');
     const lines = wifiList().map(n => [n.rssi, wfName(n), n.hidden ? __('si') : __('no'), n.bssid, n.vendor, n.band, n.channel, n.width_mhz,
-      '802.11' + n.std, n.security, n.cipher, +n.k, +n.v, +n.r, +n.mlo, n.clients, n.load_pct].map(q).join(';'));
+      '802.11' + n.std, n.security, n.cipher, +n.k, +n.v, +n.r, +n.mlo, n.clients, n.load_pct].map(csvCell).join(';'));
     const b = e.target.closest('#wf-csv');
     navigator.clipboard?.writeText([head, ...lines].join('\n')).then(() => { b.textContent = __('Copiato'); setTimeout(() => b.textContent = __('Copia CSV'), 1400); });
   }
@@ -2452,7 +2459,7 @@ function wifiMonRender(){
 }
 $('wfm-csv').addEventListener('click', e => {
   const head = __('ora;rssi_dbm;qualita_pct;bssid;canale;rx_mbps;tx_mbps');
-  const lines = wf.mon.samples.map(s => [wifiClock(s.t), s.rssi, s.quality, s.bssid, s.channel, s.rx_mbps, s.tx_mbps].map(v => v ?? '').join(';'));
+  const lines = wf.mon.samples.map(s => [wifiClock(s.t), s.rssi, s.quality, s.bssid, s.channel, s.rx_mbps, s.tx_mbps].map(csvCell).join(';'));
   navigator.clipboard?.writeText([head, ...lines].join('\n')).then(() => { e.target.textContent = __('Copiato'); setTimeout(() => e.target.textContent = __('Copia CSV'), 1400); });
 });
 
@@ -2482,7 +2489,7 @@ const snAgo = s => {
 };
 const snHms = s => Math.floor(s / 3600) + ':' + String(Math.floor(s % 3600 / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
 const snClock = ms => { const s = Math.round(ms / 1000); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
-const snCsv = rows => rows.map(r => r.map(c => { const s = String(c ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(';')).join('\r\n');
+const snCsv = rows => rows.map(r => r.map(csvCell).join(';')).join('\r\n');
 const snChip = (attr, key, label, on) => '<button type="button" class="chip' + (on ? ' on' : '') + '" ' + attr + '="' + key + '">' + label + '</button>';
 
 /* common request: host, port and credentials of the open tab */

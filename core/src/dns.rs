@@ -109,7 +109,11 @@ fn read_system_dns() -> Result<SystemDns> {
             "System DNS configuration cannot be read: {e}"
         )
     })?;
-    let servers = usable_servers(cfg.name_servers().iter().map(|ns| ns.socket_addr));
+    let servers = usable_servers(cfg.name_servers().iter().flat_map(|ns| {
+        ns.connections
+            .iter()
+            .map(move |c| SocketAddr::new(ns.ip, c.port))
+    }));
     if servers.is_empty() {
         return Err(t!(
             "Nessun server DNS utilizzabile configurato su questo PC",
@@ -191,13 +195,10 @@ pub fn build_query(name: &str, rtype: RecordType, id: u16) -> Result<Vec<u8>> {
 }
 
 fn encode_query(q: &Query, id: u16, o: Opts) -> Result<Vec<u8>> {
-    let mut msg = Message::new();
-    msg.set_id(id)
-        .set_message_type(MessageType::Query)
-        .set_op_code(OpCode::Query)
-        .set_recursion_desired(!o.no_recursion)
-        .set_authentic_data(o.ad)
-        .set_checking_disabled(o.cd);
+    let mut msg = Message::new(id, MessageType::Query, OpCode::Query);
+    msg.metadata.recursion_desired = !o.no_recursion;
+    msg.metadata.authentic_data = o.ad;
+    msg.metadata.checking_disabled = o.cd;
     if o.dnssec {
         let mut e = hickory_proto::op::Edns::new();
         e.set_dnssec_ok(true).set_max_payload(1232);
@@ -233,12 +234,12 @@ fn check_reply(raw: &[u8], id: u16, q: &Query) -> Reply {
             ))
         }
     };
-    if m.message_type() != MessageType::Response || m.op_code() != OpCode::Query {
+    if m.metadata.message_type != MessageType::Response || m.metadata.op_code != OpCode::Query {
         return Reply::Unrelated;
     }
-    match m.queries() {
+    match m.queries.as_slice() {
         [one] if one == q => Reply::Ok(Box::new(m)),
-        [] if m.response_code() != ResponseCode::NoError => Reply::Ok(Box::new(m)),
+        [] if m.metadata.response_code != ResponseCode::NoError => Reply::Ok(Box::new(m)),
         _ => Reply::Unrelated,
     }
 }
@@ -307,7 +308,7 @@ pub async fn query_with(
         let m = tokio::time::timeout(timeout, exchange_udp(server, &packet, id, &q))
             .await
             .map_err(|_| "TIMEOUT".to_string())??;
-        if !m.truncated() {
+        if !m.metadata.truncation {
             msg = Some(m);
         }
     }
@@ -369,9 +370,9 @@ pub async fn query_any_with(
 
 /// Data of the DNSSEC types, which `hickory-proto` delivers as raw bytes.
 fn raw_text(r: &hickory_proto::rr::Record) -> Option<String> {
-    match r.data() {
-        Some(hickory_proto::rr::RData::Unknown { code, rdata }) => {
-            rdata::text(u16::from(*code), rdata.anything())
+    match &r.data {
+        hickory_proto::rr::RData::Unknown { code, rdata } => {
+            rdata::text(u16::from(*code), &rdata.anything)
         }
         _ => None,
     }
@@ -382,9 +383,9 @@ pub fn record_text(r: &hickory_proto::rr::Record) -> String {
     match raw_text(r) {
         Some(t) => format!(
             "{} {} {} {} {t}",
-            r.name(),
-            r.ttl(),
-            r.dns_class(),
+            r.name,
+            r.ttl,
+            r.dns_class,
             r.record_type()
         ),
         None => r.to_string(),
@@ -399,9 +400,9 @@ pub fn record_value(r: &hickory_proto::rr::Record) -> String {
 /// Response flags relevant to anyone comparing servers.
 pub fn flags(msg: &Message) -> Vec<String> {
     [
-        (msg.authoritative(), "AA"),
-        (msg.recursion_available(), "RA"),
-        (msg.authentic_data(), "AD"),
+        (msg.metadata.authoritative, "AA"),
+        (msg.metadata.recursion_available, "RA"),
+        (msg.metadata.authentic_data, "AD"),
     ]
     .iter()
     .filter(|(on, _)| *on)
@@ -410,9 +411,9 @@ pub fn flags(msg: &Message) -> Vec<String> {
 }
 
 fn record_lines(msg: &Message) -> Vec<String> {
-    msg.answers()
+    msg.answers
         .iter()
-        .chain(msg.name_servers().iter())
+        .chain(msg.authorities.iter())
         .map(record_text)
         .collect()
 }
@@ -445,11 +446,11 @@ async fn one(name: &str, rtype: RecordType, label: String, servers: Vec<SocketAd
     match query_any_with(name, rtype, &servers, opts).await {
         Ok((msg, ms, used)) => {
             r.server_ip = used.ip().to_string();
-            r.status = status_name(msg.response_code());
+            r.status = status_name(msg.metadata.response_code);
             r.time_ms = Some(ms);
             r.answers = record_lines(&msg);
             r.flags = flags(&msg);
-            let mut data: Vec<String> = msg.answers().iter().map(record_value).collect();
+            let mut data: Vec<String> = msg.answers.iter().map(record_value).collect();
             data.sort();
             data.dedup();
             r.data = data;
@@ -540,11 +541,11 @@ pub async fn lookup_a(
 ) -> std::result::Result<(String, Vec<Ipv4Addr>), String> {
     let (msg, _, _) = query_any(name, RecordType::A, servers).await?;
     let ips = msg
-        .answers()
+        .answers
         .iter()
         .filter_map(|r| record_data(&r.to_string()).parse().ok())
         .collect();
-    Ok((status_name(msg.response_code()), ips))
+    Ok((status_name(msg.metadata.response_code), ips))
 }
 
 pub async fn lookup_txt(name: &str, servers: &[SocketAddr]) -> Vec<String> {
@@ -557,11 +558,11 @@ pub async fn txt(name: &str, servers: &[SocketAddr]) -> std::result::Result<Vec<
     use hickory_proto::rr::RData;
     let (msg, _, _) = query_any(name, RecordType::TXT, servers).await?;
     Ok(msg
-        .answers()
+        .answers
         .iter()
-        .filter_map(|r| match r.data() {
-            Some(RData::TXT(t)) => Some(
-                t.txt_data()
+        .filter_map(|r| match &r.data {
+            RData::TXT(t) => Some(
+                t.txt_data
                     .iter()
                     .map(|b| String::from_utf8_lossy(b).into_owned())
                     .collect(),
@@ -576,10 +577,10 @@ pub async fn mx(name: &str, servers: &[SocketAddr]) -> std::result::Result<Vec<S
     use hickory_proto::rr::RData;
     let (msg, _, _) = query_any(name, RecordType::MX, servers).await?;
     let mut v: Vec<(u16, String)> = msg
-        .answers()
+        .answers
         .iter()
-        .filter_map(|r| match r.data() {
-            Some(RData::MX(m)) => Some((m.preference(), m.exchange().to_ascii())),
+        .filter_map(|r| match &r.data {
+            RData::MX(m) => Some((m.preference, m.exchange.to_ascii())),
             _ => None,
         })
         .collect();
@@ -596,7 +597,7 @@ pub async fn ptr(ip: Ipv4Addr) -> String {
     let name = format!("{}.{}.{}.{}.in-addr.arpa", o[3], o[2], o[1], o[0]);
     match query_any(&name, RecordType::PTR, &sys.servers).await {
         Ok((msg, _, _)) => msg
-            .answers()
+            .answers
             .iter()
             .filter(|r| r.record_type() == RecordType::PTR)
             .map(|r| {
@@ -635,10 +636,10 @@ mod tests {
     fn pacchetto_e_risposta() {
         let q = build_query("example.com", RecordType::MX, 0xBEEF).unwrap();
         let m = Message::from_vec(&q).unwrap();
-        assert_eq!(m.id(), 0xBEEF);
-        assert!(m.recursion_desired());
-        assert_eq!(m.queries()[0].query_type(), RecordType::MX);
-        assert_eq!(m.queries()[0].name().to_ascii(), "example.com.");
+        assert_eq!(m.metadata.id, 0xBEEF);
+        assert!(m.metadata.recursion_desired);
+        assert_eq!(m.queries[0].query_type(), RecordType::MX);
+        assert_eq!(m.queries[0].name().to_ascii(), "example.com.");
     }
 
     /// Test DNS server: over UDP it answers "truncated", over TCP with two MX records.
@@ -650,13 +651,11 @@ mod tests {
         let tcp = tokio::net::TcpListener::bind(addr).await.unwrap();
         let reply = |req: &[u8], truncated: bool| {
             let q = Message::from_vec(req).unwrap();
-            let mut r = Message::new();
-            r.set_id(q.id())
-                .set_message_type(MessageType::Response)
-                .set_truncated(truncated);
-            r.add_query(q.queries()[0].clone());
+            let mut r = Message::response(q.metadata.id, OpCode::Query);
+            r.metadata.truncation = truncated;
+            r.add_query(q.queries[0].clone());
             if !truncated {
-                let name = q.queries()[0].name().clone();
+                let name = q.queries[0].name().clone();
                 for (pref, mx) in [(20, "mx2.example.com."), (10, "mx1.example.com.")] {
                     r.add_answer(Record::from_rdata(
                         name.clone(),
@@ -710,12 +709,11 @@ mod tests {
             let mut buf = [0u8; 512];
             let (n, from) = udp.recv_from(&mut buf).await.unwrap();
             let q = Message::from_vec(&buf[..n]).unwrap();
-            let mut r = Message::new();
-            r.set_id(q.id()).set_message_type(MessageType::Response);
-            r.add_query(q.queries()[0].clone());
+            let mut r = Message::response(q.metadata.id, OpCode::Query);
+            r.add_query(q.queries[0].clone());
             let txt = TXT::new(vec!["v=DKIM1; k=rsa; p=AAAA".into(), "BBBB".into()]);
             r.add_answer(Record::from_rdata(
-                q.queries()[0].name().clone(),
+                q.queries[0].name().clone(),
                 3600,
                 RData::TXT(txt),
             ));
@@ -786,13 +784,11 @@ mod tests {
         use hickory_proto::rr::rdata::A;
         use hickory_proto::rr::{RData, Record};
         let q = Message::from_vec(req).unwrap();
-        let mut query = q.queries()[0].clone();
+        let mut query = q.queries[0].clone();
         if let Some(n) = name {
             query.set_name(Name::from_ascii(n).unwrap());
         }
-        let mut r = Message::new();
-        r.set_id(id.unwrap_or(q.id()))
-            .set_message_type(MessageType::Response);
+        let mut r = Message::response(id.unwrap_or(q.metadata.id), OpCode::Query);
         r.add_answer(Record::from_rdata(
             query.name().clone(),
             60,
@@ -853,11 +849,9 @@ mod tests {
             let mut buf = [0u8; 512];
             let (n, from) = udp.recv_from(&mut buf).await.unwrap();
             let q = Message::from_vec(&buf[..n]).unwrap();
-            let mut r = Message::new();
-            r.set_id(q.id())
-                .set_message_type(MessageType::Response)
-                .set_truncated(true);
-            r.add_query(q.queries()[0].clone());
+            let mut r = Message::response(q.metadata.id, OpCode::Query);
+            r.metadata.truncation = true;
+            r.add_query(q.queries[0].clone());
             udp.send_to(&r.to_vec().unwrap(), from).await.unwrap();
         });
         tokio::spawn(async move {

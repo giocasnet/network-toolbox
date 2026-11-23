@@ -14,15 +14,16 @@ pub const CLEAR_AFTER_SECS: u64 = 30;
 mod windows_impl;
 
 /// Copies `text` to the clipboard; returns the clipboard sequence number
-/// after the copy, to be passed to [`clear_if_unchanged`].
-pub fn copy_secret(text: &str) -> crate::Result<u32> {
+/// after the copy, to be passed to [`clear_if_unchanged`]. `owner` is the handle of the
+/// app window (0 if it is not available: the copy is tried without an owner).
+pub fn copy_secret(text: &str, owner: isize) -> crate::Result<u32> {
     #[cfg(windows)]
     {
-        windows_impl::copy_secret(text)
+        windows_impl::copy_secret(text, owner)
     }
     #[cfg(not(windows))]
     {
-        let _ = text;
+        let _ = (text, owner);
         Err(crate::t!(
             "Appunti protetti disponibili solo su Windows",
             "Protected clipboard is only available on Windows"

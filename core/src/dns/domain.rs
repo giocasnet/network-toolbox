@@ -190,8 +190,8 @@ fn of_type(recs: &[Record], t: RecordType) -> impl Iterator<Item = &Record> {
 }
 
 fn raw_of(r: &Record) -> Option<&[u8]> {
-    match r.data() {
-        Some(RData::Unknown { rdata, .. }) => Some(rdata.anything()),
+    match &r.data {
+        RData::Unknown { rdata, .. } => Some(&rdata.anything),
         _ => None,
     }
 }
@@ -1242,7 +1242,7 @@ async fn addresses(env: &Env, name: &str) -> (Vec<String>, Vec<String>) {
         sys(env, name, RecordType::AAAA, Opts::default())
     );
     let pick = |m: Option<Message>, t: RecordType| -> Vec<String> {
-        m.map(|m| of_type(m.answers(), t).map(record_value).collect())
+        m.map(|m| of_type(&m.answers, t).map(record_value).collect())
             .unwrap_or_default()
     };
     (pick(a, RecordType::A), pick(aaaa, RecordType::AAAA))
@@ -1256,7 +1256,9 @@ async fn axfr_allowed(domain: &str, addr: SocketAddr) -> Option<bool> {
         ..Opts::default()
     };
     match query_with(domain, RecordType::AXFR, addr, opts, Duration::from_secs(3)).await {
-        Ok((m, _)) => Some(m.response_code() == ResponseCode::NoError && !m.answers().is_empty()),
+        Ok((m, _)) => {
+            Some(m.metadata.response_code == ResponseCode::NoError && !m.answers.is_empty())
+        }
         // connection closed or refused after the request: refused
         Err(e) if e.starts_with("ERRORE") || e.starts_with("ERROR") => Some(false),
         Err(_) => None,
@@ -1273,18 +1275,18 @@ async fn probe(domain: &str, mut n: NsInfo, port: u16, axfr: bool) -> (NsInfo, V
     if let Ok((m, ms)) = direct(domain, RecordType::SOA, addr, Opts::default()).await {
         n.responds = true;
         n.time_ms = Some(ms);
-        n.authoritative = m.authoritative();
-        n.recursion = m.recursion_available();
-        n.rcode = status_name(m.response_code());
-        n.serial = of_type(m.answers(), RecordType::SOA).find_map(|r| match r.data() {
-            Some(RData::SOA(s)) => Some(s.serial()),
+        n.authoritative = m.metadata.authoritative;
+        n.recursion = m.metadata.recursion_available;
+        n.rcode = status_name(m.metadata.response_code);
+        n.serial = of_type(&m.answers, RecordType::SOA).find_map(|r| match &r.data {
+            RData::SOA(s) => Some(s.serial),
             _ => None,
         });
         if let Ok((m, _)) = direct(domain, RecordType::NS, addr, Opts::default()).await {
-            if m.authoritative() {
-                zone_ns = of_type(m.answers(), RecordType::NS)
-                    .filter_map(|r| match r.data() {
-                        Some(RData::NS(x)) => Some(host_of(&x.0)),
+            if m.metadata.authoritative {
+                zone_ns = of_type(&m.answers, RecordType::NS)
+                    .filter_map(|r| match &r.data {
+                        RData::NS(x) => Some(host_of(&x.0)),
                         _ => None,
                     })
                     .collect();
@@ -1307,9 +1309,9 @@ struct Referral {
 async fn referral(env: &Env, domain: &str, parent: &str) -> Option<Referral> {
     let pq = if parent.is_empty() { "." } else { parent };
     let m = sys(env, pq, RecordType::NS, Opts::default()).await?;
-    let names: Vec<String> = of_type(m.answers(), RecordType::NS)
-        .filter_map(|r| match r.data() {
-            Some(RData::NS(x)) => Some(host_of(&x.0)),
+    let names: Vec<String> = of_type(&m.answers, RecordType::NS)
+        .filter_map(|r| match &r.data {
+            RData::NS(x) => Some(host_of(&x.0)),
             _ => None,
         })
         .take(3)
@@ -1328,15 +1330,15 @@ async fn referral(env: &Env, domain: &str, parent: &str) -> Option<Referral> {
             Err(_) => continue,
         };
         let all: Vec<Record> = m
-            .answers()
+            .answers
             .iter()
-            .chain(m.name_servers().iter())
+            .chain(m.authorities.iter())
             .cloned()
             .collect();
         let ns: Vec<String> = of_type(&all, RecordType::NS)
-            .filter(|r| same(&r.name().to_ascii(), domain))
-            .filter_map(|r| match r.data() {
-                Some(RData::NS(x)) => Some(host_of(&x.0)),
+            .filter(|r| same(&r.name.to_ascii(), domain))
+            .filter_map(|r| match &r.data {
+                RData::NS(x) => Some(host_of(&x.0)),
                 _ => None,
             })
             .collect();
@@ -1344,11 +1346,11 @@ async fn referral(env: &Env, domain: &str, parent: &str) -> Option<Referral> {
             continue;
         }
         let glue = m
-            .additionals()
+            .additionals
             .iter()
-            .filter_map(|r| match r.data() {
-                Some(RData::A(a)) => Some((host_of(r.name()), IpAddr::V4(a.0))),
-                Some(RData::AAAA(a)) => Some((host_of(r.name()), IpAddr::V6(a.0))),
+            .filter_map(|r| match &r.data {
+                RData::A(a) => Some((host_of(&r.name), IpAddr::V4(a.0))),
+                RData::AAAA(a) => Some((host_of(&r.name), IpAddr::V6(a.0))),
                 _ => None,
             })
             .collect();
@@ -1357,7 +1359,7 @@ async fn referral(env: &Env, domain: &str, parent: &str) -> Option<Referral> {
             ..Opts::default()
         };
         let ds = match direct(domain, RecordType::DS, addr, dnssec_on).await {
-            Ok((m, _)) => of_type(m.answers(), RecordType::DS)
+            Ok((m, _)) => of_type(&m.answers, RecordType::DS)
                 .filter_map(|r| raw_of(r).and_then(rdata::ds))
                 .collect(),
             Err(_) => vec![],
@@ -1379,12 +1381,15 @@ async fn validation(env: &Env, domain: &str) -> Validation {
             continue;
         };
         v.resolver = r.ip().to_string();
-        v.normal = Some((status_name(m.response_code()), m.authentic_data()));
+        v.normal = Some((
+            status_name(m.metadata.response_code),
+            m.metadata.authentic_data,
+        ));
         let cd = Opts { cd: true, ..ask };
         v.cd = query_with(domain, RecordType::SOA, *r, cd, DIRECT)
             .await
             .ok()
-            .map(|(m, _)| status_name(m.response_code()));
+            .map(|(m, _)| status_name(m.metadata.response_code));
         break;
     }
     let ad = Opts {
@@ -1393,19 +1398,19 @@ async fn validation(env: &Env, domain: &str) -> Validation {
     };
     v.system_ad = sys(env, domain, RecordType::SOA, ad)
         .await
-        .map(|m| m.authentic_data());
+        .map(|m| m.metadata.authentic_data);
     v
 }
 
 fn soa_of(r: &Record) -> Option<Soa> {
-    match r.data() {
-        Some(RData::SOA(s)) => Some(Soa {
-            mname: host_of(s.mname()),
-            serial: s.serial(),
-            refresh: s.refresh() as i64,
-            retry: s.retry() as i64,
-            expire: s.expire() as i64,
-            minimum: s.minimum() as i64,
+    match &r.data {
+        RData::SOA(s) => Some(Soa {
+            mname: host_of(&s.mname),
+            serial: s.serial,
+            refresh: s.refresh as i64,
+            retry: s.retry as i64,
+            expire: s.expire as i64,
+            minimum: s.minimum as i64,
         }),
         _ => None,
     }
@@ -1454,18 +1459,18 @@ pub async fn analyze(req: DomainReq, env: &Env) -> Result<DomainResult> {
                 "This PC's DNS does not answer ({e})"
             )
         })?;
-    if m.response_code() == ResponseCode::NXDomain {
+    if m.metadata.response_code == ResponseCode::NXDomain {
         return Err(tf!(
             "Il dominio {asked} non esiste (NXDOMAIN)",
             "The domain {asked} does not exist (NXDOMAIN)"
         ));
     }
-    let own = of_type(m.answers(), RecordType::SOA).next().cloned();
-    let upper = of_type(m.name_servers(), RecordType::SOA).next().cloned();
+    let own = of_type(&m.answers, RecordType::SOA).next().cloned();
+    let upper = of_type(&m.authorities, RecordType::SOA).next().cloned();
     let (soa_rec, domain, zone_note) = match (own, upper) {
         (Some(r), _) => (r, asked.clone(), String::new()),
         (None, Some(r)) => {
-            let zone = host_of(r.name());
+            let zone = host_of(&r.name);
             let note = tf!(
                 "{asked} fa parte della zona {zone}: l'analisi riguarda la zona.",
                 "{asked} is part of the zone {zone}: the analysis covers the zone."
@@ -1476,7 +1481,7 @@ pub async fn analyze(req: DomainReq, env: &Env) -> Result<DomainResult> {
             return Err(tf!(
                 "Nessuna zona trovata per {asked} ({})",
                 "No zone found for {asked} ({})",
-                status_name(m.response_code())
+                status_name(m.metadata.response_code)
             ))
         }
     };
@@ -1518,14 +1523,14 @@ pub async fn analyze(req: DomainReq, env: &Env) -> Result<DomainResult> {
         } else {
             it.next()
                 .flatten()
-                .map(|m| of_type(m.answers(), t).cloned().collect())
+                .map(|m| of_type(&m.answers, t).cloned().collect())
                 .unwrap_or_default()
         };
         if recs.is_empty() {
             empty_types.push(t.to_string());
         }
         for r in &recs {
-            let owner = host_of(r.name());
+            let owner = host_of(&r.name);
             records.push(Rec {
                 rtype: t.to_string(),
                 name: if same(&owner, &domain) {
@@ -1534,13 +1539,13 @@ pub async fn analyze(req: DomainReq, env: &Env) -> Result<DomainResult> {
                     owner
                 },
                 value: record_value(r),
-                ttl: r.ttl(),
+                ttl: r.ttl,
             });
         }
         by_type.push((t, recs));
     }
     let tlsa: Vec<Record> = tlsa_m
-        .map(|m| of_type(m.answers(), RecordType::TLSA).cloned().collect())
+        .map(|m| of_type(&m.answers, RecordType::TLSA).cloned().collect())
         .unwrap_or_default();
     if tlsa.is_empty() {
         empty_types.push("TLSA".into());
@@ -1550,7 +1555,7 @@ pub async fn analyze(req: DomainReq, env: &Env) -> Result<DomainResult> {
             rtype: "TLSA".into(),
             name: tlsa_name.clone(),
             value: record_value(r),
-            ttl: r.ttl(),
+            ttl: r.ttl,
         });
     }
     let get = |t: RecordType| -> &[Record] {
@@ -1560,8 +1565,9 @@ pub async fn analyze(req: DomainReq, env: &Env) -> Result<DomainResult> {
             .map(|(_, v)| v.as_slice())
             .unwrap_or(&[])
     };
-    let wildcard = wild_m
-        .is_some_and(|m| m.response_code() == ResponseCode::NoError && !m.answers().is_empty());
+    let wildcard = wild_m.is_some_and(|m| {
+        m.metadata.response_code == ResponseCode::NoError && !m.answers.is_empty()
+    });
     let addresses_out: Vec<String> = get(RecordType::A)
         .iter()
         .chain(get(RecordType::AAAA))
@@ -1571,8 +1577,8 @@ pub async fn analyze(req: DomainReq, env: &Env) -> Result<DomainResult> {
     // name servers: those of the registry, then those only the zone declares
     let resolver_ns: Vec<String> = get(RecordType::NS)
         .iter()
-        .filter_map(|r| match r.data() {
-            Some(RData::NS(x)) => Some(host_of(&x.0)),
+        .filter_map(|r| match &r.data {
+            RData::NS(x) => Some(host_of(&x.0)),
             _ => None,
         })
         .collect();
@@ -1666,14 +1672,14 @@ pub async fn analyze(req: DomainReq, env: &Env) -> Result<DomainResult> {
             };
             if let Some(m) = m {
                 sigs.extend(
-                    of_type(m.answers(), RecordType::RRSIG)
+                    of_type(&m.answers, RecordType::RRSIG)
                         .filter_map(|r| raw_of(r).and_then(rdata::rrsig)),
                 );
             }
         }
     }
     let nsec3 = nsec3_m.and_then(|m| {
-        of_type(m.answers(), RecordType::NSEC3PARAM)
+        of_type(&m.answers, RecordType::NSEC3PARAM)
             .find_map(|r| raw_of(r).and_then(rdata::nsec3param))
     });
 
@@ -1768,7 +1774,6 @@ pub async fn run(req: DomainReq) -> Result<DomainResult> {
 mod tests {
     use super::super::rdata::tests::key_rdata;
     use super::*;
-    use hickory_proto::op::MessageType;
     use hickory_proto::rr::rdata::{self as rd, NULL};
     use hickory_proto::rr::Name;
     use sha2::{Digest, Sha256};
@@ -2306,9 +2311,8 @@ mod tests {
     }
 
     fn reply(q: &Message) -> Message {
-        let mut r = Message::new();
-        r.set_id(q.id()).set_message_type(MessageType::Response);
-        r.add_query(q.queries()[0].clone());
+        let mut r = Message::response(q.metadata.id, hickory_proto::op::OpCode::Query);
+        r.add_query(q.queries[0].clone());
         r
     }
 
@@ -2377,19 +2381,19 @@ mod tests {
         ds_raw.extend_from_slice(&[13, 2]);
         ds_raw.extend_from_slice(&ds.digest);
         Arc::new(move |ip, q, tcp| {
-            let qq = &q.queries()[0];
+            let qq = &q.queries[0];
             let (n, t) = (host_of(qq.name()), qq.query_type());
-            let with_do = q.extensions().as_ref().is_some_and(|e| e.dnssec_ok());
+            let with_do = q.edns.as_ref().is_some_and(|e| e.flags().dnssec_ok);
             let mut r = reply(q);
             let zone = n == "example.com";
             match ip {
                 // parent zone (query without recursion)
-                1 if !q.recursion_desired() => {
-                    r.set_authoritative(t == RecordType::DS);
+                1 if !q.metadata.recursion_desired => {
+                    r.metadata.authoritative = t == RecordType::DS;
                     match t {
                         RecordType::NS if zone => {
                             for x in ["ns1", "ns2", "ns3"] {
-                                r.add_name_server(nsr(&format!("{x}.example.net")));
+                                r.add_authority(nsr(&format!("{x}.example.net")));
                             }
                             r.add_additional(a("ns1.example.net", 3600, 11));
                         }
@@ -2401,19 +2405,19 @@ mod tests {
                 }
                 // the PC's DNS and validating resolver
                 1 => {
-                    r.set_recursion_available(true);
-                    if with_do && q.authentic_data() && t == RecordType::SOA {
-                        r.set_authentic_data(!q.checking_disabled());
+                    r.metadata.recursion_available = true;
+                    if with_do && q.metadata.authentic_data && t == RecordType::SOA {
+                        r.metadata.authentic_data = !q.metadata.checking_disabled;
                     }
                     match (n.as_str(), t) {
                         ("example.com", RecordType::SOA) => {
                             r.add_answer(soa(2026111603));
                         }
                         ("www.example.com", RecordType::SOA) => {
-                            r.add_name_server(soa(2026111603));
+                            r.add_authority(soa(2026111603));
                         }
                         ("nessuno.example", _) => {
-                            r.set_response_code(ResponseCode::NXDomain);
+                            r.metadata.response_code = ResponseCode::NXDomain;
                         }
                         ("example.com", RecordType::A) => {
                             r.add_answer(rr(
@@ -2468,9 +2472,9 @@ mod tests {
                 }
                 // name servers of the zone
                 11 | 12 | 14 => {
-                    r.set_authoritative(true);
+                    r.metadata.authoritative = true;
                     if !zone {
-                        r.set_response_code(ResponseCode::Refused);
+                        r.metadata.response_code = ResponseCode::Refused;
                         return Some(r);
                     }
                     match t {
@@ -2503,7 +2507,7 @@ mod tests {
                             r.add_answer(soa(2026111603));
                         }
                         RecordType::AXFR => {
-                            r.set_response_code(ResponseCode::Refused);
+                            r.metadata.response_code = ResponseCode::Refused;
                         }
                         _ => {}
                     }
@@ -2655,7 +2659,7 @@ mod tests {
         let base = scenario();
         // only .1 is up, and it is neither parent zone nor validating resolver
         let h: Handler = Arc::new(move |ip, q, tcp| {
-            if !q.recursion_desired() || (q.extensions().is_some() && q.authentic_data()) {
+            if !q.metadata.recursion_desired || (q.edns.is_some() && q.metadata.authentic_data) {
                 return None;
             }
             base(ip, q, tcp)
