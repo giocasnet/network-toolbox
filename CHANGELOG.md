@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.3.0 — 23 Nov 2026 — Bonjour and UPnP in Local network
+- **Local network, Bonjour tab**: browser for the services announced with mDNS / DNS-SD
+  (printers, AirPlay, SMB, SSH, web interfaces...). It enumerates every service type, then reads
+  host, port, TXT records and addresses of each instance. Results are grouped by host, with search,
+  CSV and shortcuts to Ping, Ports and SNMP. It flags Telnet and FTP announcements and, as
+  information, remote access and file sharing.
+- **Local network, UPnP tab**: SSDP search on every IPv4 adapter, then the device description
+  (manufacturer, model, services). A router with UPnP IGD enabled is flagged. The description is
+  downloaded only if its URL points to the address that replied; nothing is ever sent to the
+  devices and the router's port mappings are not read.
+- Both tabs only send multicast questions, have a selectable listening time and a **Stop** button
+  that keeps what has been found so far.
+- No new dependency beyond `socket2` (already used by `tokio`).
+
 ## 2.2.0 — 20 Nov 2026 — Ping size and MTU, Email tabs
 - **Ping**: selectable data size (presets 32, 64, 512, 1024, 1472, 1500, or any value from 0 to
   65500 bytes) and a "Do not fragment" (DF) option. A packet that does not fit the path is shown as

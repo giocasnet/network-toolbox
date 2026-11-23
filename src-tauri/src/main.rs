@@ -43,6 +43,8 @@ struct ProbeState {
     tls: Mutex<Stop>,
     snmp: Mutex<Stop>,
     snmp_mon: Mutex<Stop>,
+    bonjour: Mutex<Stop>,
+    upnp: Mutex<Stop>,
 }
 
 /// Switch for a test that starts. A test of the same tool still running
@@ -440,6 +442,36 @@ async fn neigh_scan(
     Ok(res)
 }
 
+/// Bonjour (mDNS / DNS-SD) browser: services announced on the local network.
+#[tauri::command]
+async fn bonjour_scan(
+    state: State<'_, ProbeState>,
+    req: ntb_core::bonjour::BonjourReq,
+) -> Result<ntb_core::bonjour::BonjourResult, String> {
+    let stop = new_stop(&state.bonjour);
+    ntb_core::bonjour::run(req, &stop).await
+}
+
+#[tauri::command]
+fn bonjour_stop(state: State<'_, ProbeState>) {
+    stop_current(&state.bonjour);
+}
+
+/// UPnP scan: SSDP search and device descriptions.
+#[tauri::command]
+async fn upnp_scan(
+    state: State<'_, ProbeState>,
+    req: ntb_core::upnp::UpnpReq,
+) -> Result<ntb_core::upnp::UpnpResult, String> {
+    let stop = new_stop(&state.upnp);
+    ntb_core::upnp::run(req, &stop).await
+}
+
+#[tauri::command]
+fn upnp_stop(state: State<'_, ProbeState>) {
+    stop_current(&state.upnp);
+}
+
 #[tauri::command]
 fn lan_stop(state: State<'_, LanState>) {
     stop_current(&state.stop);
@@ -611,6 +643,10 @@ fn main() {
             lan_scan,
             lan_stop,
             neigh_scan,
+            bonjour_scan,
+            upnp_scan,
+            bonjour_stop,
+            upnp_stop,
             wifi_scan,
             wifi_monitor,
             wifi_monitor_stop,

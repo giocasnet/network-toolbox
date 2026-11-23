@@ -2180,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "nettoolbox"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "ntb-core",
  "serde",
@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "ntb-core"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "aes",
  "cbc",
@@ -2228,6 +2228,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "socket2",
  "tokio",
  "tokio-rustls",
  "windows-sys 0.59.0",

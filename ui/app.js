@@ -1959,6 +1959,152 @@ $('res-neigh').addEventListener('input', e => {
 });
 $('res-neigh').addEventListener('click', gotoTool);
 
+/* ── Local network, Bonjour and UPnP tabs: devices found by multicast discovery ── */
+const dsChecks = checks => '<table class="tbl smtp-checks hx-tbl"><thead><tr><th></th><th>' + __('Area') + '</th><th>' + __('Controllo') + '</th><th>' + __('Risultato') + '</th></tr></thead><tbody>'
+  + checks.map(c => '<tr><td>' + chkPill(c.status) + '</td><td class="k hx-area">' + esc(c.area) + '</td><td class="k">' + esc(c.name) + '</td><td class="m">' + esc(c.detail) + '</td></tr>').join('') + '</tbody></table>';
+const dsSort = checks => checks.map((c, i) => [c, i]).sort((a, b) => (CHK_RANK[a[0].status] - CHK_RANK[b[0].status]) || (a[1] - b[1])).map(x => x[0]);
+const dsState = checks => checks.some(c => c.status === 'err') ? 'err' : checks.some(c => c.status === 'warn') ? 'warn' : 'ok';
+const dsIcon = '<span class="lan-ico"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="9" rx="1.5"/><path d="M7 16h6M10 13v3"/></svg></span>';
+const dsActions = ip => ip ? '<div class="row-act"><button type="button" data-goto="ping" data-ip="' + esc(ip) + '">Ping</button>'
+  + '<button type="button" data-goto="portscan" data-ip="' + esc(ip) + '">' + __('Porte') + '</button>'
+  + '<button type="button" data-goto="snmp" data-ip="' + esc(ip) + '">SNMP</button></div>' : '';
+const dsTools = () => '<div class="lan-tools" style="margin:12px 0"><label>' + __('Cerca') + ' <input type="text" data-dsq spellcheck="false" autocomplete="off"></label>'
+  + '<button type="button" class="chip" data-dscsv>' + __('Copia CSV') + '</button></div>';
+const dsFirstV4 = addrs => addrs.find(a => /^\d+\.\d+\.\d+\.\d+$/.test(a)) || '';
+const dsChips = (items, max) => '<span class="nb-chips">' + items.slice(0, max).map(x => '<span class="hx-src">' + esc(x) + '</span>').join('')
+  + (items.length > max ? '<span class="nb-dim">+' + (items.length - max) + '</span>' : '') + '</span>';
+
+/* Bonjour */
+const bjSvcName = s => s.label || s.kind;
+function bjMatches(h, q){
+  if (!q) return true;
+  const t = q.trim().toLowerCase();
+  return [h.name, ...h.addrs, ...h.services.flatMap(s => [s.instance, s.kind, s.label])].some(x => x && String(x).toLowerCase().includes(t));
+}
+function bjDetail(h){
+  const html = '<table class="tbl hx-tbl"><thead><tr><th>' + __('Servizio') + '</th><th>' + __('Tipo') + '</th><th>' + __('Porta') + '</th><th>TXT</th></tr></thead><tbody>'
+    + h.services.map(s => '<tr><td>' + esc(s.instance) + '</td><td class="m">' + esc(s.kind) + (s.label ? '<br><span class="nb-dim">' + esc(s.label) + '</span>' : '') + '</td><td class="m">' + (s.port || '—')
+      + '</td><td class="m">' + esc(s.txt.join('\n') || '—') + '</td></tr>').join('') + '</tbody></table>';
+  return html + dsActions(dsFirstV4(h.addrs));
+}
+function bjRows(d, q, open){
+  const list = d.hosts.filter(h => bjMatches(h, q));
+  if (!list.length) return '<p class="note">' + (d.hosts.length ? __('Nessun dispositivo corrisponde a «{q}».', {q: esc(q)}) : __('Nessun servizio Bonjour trovato.')) + '</p>';
+  return list.map(h => {
+    const o = open.has(h.name);
+    return '<div class="lan-row nb-row" data-dk="' + esc(h.name) + '"><button type="button" class="lan-main" aria-expanded="' + o + '">' + dsIcon
+      + '<span class="lan-txt"><span class="lan-title">' + esc(h.name) + '</span><span class="lan-sub mono">' + esc(h.addrs.join(' · ') || '—') + '</span>'
+      + dsChips([...new Set(h.services.map(bjSvcName))], 4) + '</span>'
+      + '<span class="lan-svc">' + __('{n} servizi', {n: h.services.length}) + '</span><span class="lan-chev" aria-hidden="true">›</span></button>'
+      + (o ? '<div class="lan-detail nb-detail">' + bjDetail(h) + '</div>' : '') + '</div>';
+  }).join('');
+}
+function bjText(d){
+  const out = [__('Servizi Bonjour: {n} su {h} host', {n: d.n_services, h: d.n_hosts}), '', __('Controlli')];
+  dsSort(d.checks).forEach(c => out.push('  [' + c.status + '] ' + c.name + ': ' + c.detail));
+  out.push('', __('Servizi (CSV)'), d.csv);
+  return out.join('\n');
+}
+function bonjourRender(d){
+  const checks = dsSort(d.checks), tab = 'chk';
+  const summary = '<p class="summary"><span class="svc-dot"></span>' + __('<strong>{n}</strong> servizi su {h} host', {n: d.n_services, h: d.n_hosts}) + ' · '
+    + (d.n_types === 1 ? __('{n} tipo', {n: d.n_types}) : __('{n} tipi', {n: d.n_types})) + ' · ' + __('{n} schede, {s} s', {n: d.n_ifaces, s: d.seconds}) + (d.stopped ? ' · ' + __('fermata') : '') + '</p>';
+  const pHost = dsTools() + '<div class="lan-list" data-dslist>' + bjRows(d, '', new Set()) + '</div>';
+  const pTyp = d.types.length ? '<table class="tbl hx-tbl"><thead><tr><th>' + __('Tipo') + '</th><th>' + __('Descrizione') + '</th><th>' + __('Istanze') + '</th></tr></thead><tbody>'
+    + d.types.map(t => '<tr><td class="m">' + esc(t.kind) + '</td><td>' + esc(t.label || '—') + '</td><td class="m">' + t.count + '</td></tr>').join('') + '</tbody></table>'
+    : '<p class="note hx-top">' + __('Nessun tipo di servizio annunciato.') + '</p>';
+  return {status: d.stopped ? 'stop' : dsState(checks), data: d, text: bjText(d),
+    html: summary + rtabs([['chk', __('Controlli'), checks.length], ['host', __('Host'), d.n_hosts], ['typ', __('Tipi di servizio'), d.n_types]], tab)
+      + rpane('chk', tab, dsChecks(checks)) + rpane('host', tab, pHost) + rpane('typ', tab, pTyp)};
+}
+tools.bonjour = form => {
+  const seconds = $('bonjour-sec').value;
+  run('bonjour', 'Bonjour', __('rete locale'), async () => {
+    try { return bonjourRender(await TAURI.invoke('bonjour_scan', {req: {seconds}})); }
+    catch(e){ throw new Error(tauriError(e)); }
+  }, form);
+};
+
+/* UPnP */
+const upKey = (d, i) => d.location || d.ip + '#' + i;
+const upTitle = d => d.friendly_name || [d.manufacturer, d.model_name].filter(Boolean).join(' ') || d.ip;
+function upMatches(d, q){
+  if (!q) return true;
+  const t = q.trim().toLowerCase();
+  return [d.ip, d.friendly_name, d.manufacturer, d.model_name, d.model_number, d.kind, d.label, d.server, ...d.services.map(s => s.short)].some(x => x && String(x).toLowerCase().includes(t));
+}
+function upDetail(d){
+  const row = (k, v) => v ? '<tr><td class="k">' + k + '</td><td class="v txt">' + esc(v) + '</td></tr>' : '';
+  const html = '<table class="tbl"><tbody>' + row('IP', d.ip)
+    + row(__('Produttore'), [d.manufacturer, d.manufacturer_url].filter(Boolean).join('  ·  '))
+    + row(__('Modello'), [d.model_name, d.model_number, d.model_description].filter(Boolean).join('  ·  '))
+    + row(__('Numero di serie'), d.serial_number) + row(__('Tipo'), d.device_type || d.kind) + row('UDN', d.udn) + row('Server', d.server)
+    + row(__('Pagina web'), d.presentation_url) + row('Location', d.location)
+    + row(__('Dispositivi incorporati'), d.embedded.join(', '))
+    + row(__('Servizi'), d.services.map(s => s.short + (s.control_url ? '  ' + s.control_url : '')).join('\n'))
+    + row(__('Risposto a'), d.targets.join('\n')) + row(__('Nota'), d.note) + '</tbody></table>';
+  return html + dsActions(d.ip);
+}
+function upRows(d, q, open){
+  const list = d.devices.map((x, i) => [x, i]).filter(([x]) => upMatches(x, q));
+  if (!list.length) return '<p class="note">' + (d.devices.length ? __('Nessun dispositivo corrisponde a «{q}».', {q: esc(q)}) : __('Nessun dispositivo UPnP trovato.')) + '</p>';
+  return list.map(([x, i]) => {
+    const k = upKey(x, i), o = open.has(k);
+    const tags = (x.label ? '<span class="tag">' + esc(x.label) + '</span>' : '');
+    return '<div class="lan-row nb-row" data-dk="' + esc(k) + '"><button type="button" class="lan-main" aria-expanded="' + o + '">' + dsIcon
+      + '<span class="lan-txt"><span class="lan-title">' + esc(upTitle(x)) + tags + '</span>'
+      + '<span class="lan-sub mono">' + esc([x.ip, [x.manufacturer, x.model_name].filter(Boolean).join(' ')].filter(Boolean).join(' · ')) + '</span>'
+      + dsChips(x.services.map(s => s.short), 4) + '</span>'
+      + '<span class="lan-svc">' + (x.igd ? chkPill('warn', 'IGD') : x.described ? '' : chkPill('neutral', __('senza descrizione'))) + '</span><span class="lan-chev" aria-hidden="true">›</span></button>'
+      + (o ? '<div class="lan-detail nb-detail">' + upDetail(x) + '</div>' : '') + '</div>';
+  }).join('');
+}
+function upText(d){
+  const out = [__('Dispositivi UPnP: {n}', {n: d.n_devices}), '', __('Controlli')];
+  dsSort(d.checks).forEach(c => out.push('  [' + c.status + '] ' + c.name + ': ' + c.detail));
+  out.push('', __('Dispositivi (CSV)'), d.csv);
+  return out.join('\n');
+}
+function upnpRender(d){
+  const checks = dsSort(d.checks), tab = 'chk';
+  const summary = '<p class="summary"><span class="svc-dot"></span>' + __('<strong>{n}</strong> dispositivi', {n: d.n_devices}) + ' · ' + __('{n} servizi dichiarati', {n: d.n_services})
+    + ' · ' + __('{n} schede, {s} s', {n: d.n_ifaces, s: d.seconds}) + (d.stopped ? ' · ' + __('fermata') : '') + '</p>';
+  const pDev = dsTools() + '<div class="lan-list" data-dslist>' + upRows(d, '', new Set()) + '</div>';
+  return {status: d.stopped ? 'stop' : dsState(checks), data: d, text: upText(d),
+    html: summary + rtabs([['chk', __('Controlli'), checks.length], ['dev', __('Dispositivi'), d.n_devices]], tab) + rpane('chk', tab, dsChecks(checks)) + rpane('dev', tab, pDev)};
+}
+tools.upnp = form => {
+  const seconds = $('upnp-sec').value;
+  run('upnp', 'UPnP', __('rete locale'), async () => {
+    try { return upnpRender(await TAURI.invoke('upnp_scan', {req: {seconds}})); }
+    catch(e){ throw new Error(tauriError(e)); }
+  }, form);
+};
+
+/* rows (expand), search and CSV of both tabs; the search redraws only the rows */
+[['res-bonjour', bjRows], ['res-upnp', upRows]].forEach(([id, rows]) => {
+  const el = $(id);
+  el.addEventListener('click', e => {
+    const strip = e.target.closest('.strip');
+    if (!strip || !strip._data) return;
+    const main = e.target.closest('.lan-main');
+    if (main){
+      const key = main.closest('.nb-row').dataset.dk, open = strip._open || (strip._open = new Set());
+      if (open.has(key)) open.delete(key); else open.add(key);
+      strip.querySelector('[data-dslist]').innerHTML = rows(strip._data, strip.querySelector('[data-dsq]').value, open);
+    } else if (e.target.closest('[data-dscsv]')){
+      const b = e.target.closest('[data-dscsv]');
+      navigator.clipboard?.writeText(strip._data.csv).then(() => { b.textContent = __('Copiato'); setTimeout(() => b.textContent = __('Copia CSV'), 1400); });
+    }
+  });
+  el.addEventListener('input', e => {
+    if (!e.target.matches('[data-dsq]')) return;
+    const strip = e.target.closest('.strip');
+    strip.querySelector('[data-dslist]').innerHTML = rows(strip._data, e.target.value, strip._open || new Set());
+  });
+  el.addEventListener('click', gotoTool);
+});
+
 /* ── Wi-Fi: nearby networks, current connection, channels, signal monitor ── */
 const wf = {data: null, busy: false, shown: false, filter: 'all', at: null, timer: 0,
   mon: {samples: [], events: [], start: 0, run: false, raf: 0, roams: 0}};

@@ -13,7 +13,7 @@ cloud service: nothing leaves the PC except the network requests you start.
 
 | Area | Tools |
 |---|---|
-| Diagnostics | Ping (live, with host names, data size, "Do not fragment" and path MTU discovery) and traceroute, subnet scan, **Local network** (inventory up to /21: name, vendor, SNMP model, device type, services; **Neighbours** tab with the ARP/NDP tables of the PC), Wi-Fi (nearby networks, channels, signal monitor), DNS (comparison between servers and full domain analysis: delegation, SOA, DNSSEC), TCP ports |
+| Diagnostics | Ping (live, with host names, data size, "Do not fragment" and path MTU discovery) and traceroute, subnet scan, **Local network** (inventory up to /21: name, vendor, SNMP model, device type, services; **Neighbours** tab with the ARP/NDP tables of the PC, **Bonjour** browser and **UPnP** scan), Wi-Fi (nearby networks, channels, signal monitor), DNS (comparison between servers and full domain analysis: delegation, SOA, DNSSEC), TCP ports |
 | Information | Whois and location, blacklist (DNSBL), public IP |
 | Analysis | Subnet calculator, HTTP security headers, **TLS certificates** (chain, revocation info, accepted versions and ciphers, STARTTLS), **email** (SPF evaluated with the lookup tree, DMARC, DKIM, MTA-STS, message header analysis) |
 | Protocols | SMTP server test, **SNMP** v1/v2c/v3 (read-only: device, interfaces, LLDP, MAC/ARP tables, resources, printers, live counters), NTP, Wake-on-LAN |

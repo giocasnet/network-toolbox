@@ -1,7 +1,7 @@
 """UI test with simulated Tauri IPC (headless Chromium).
 Usage: python -E -P dev/ui-mock/ui_smoke.py [ui folder] [screenshot folder]
 (not -I: it excludes packages installed with --user, where Playwright lives)
-The expected version (2.2.0) must be updated at every release."""
+The expected version (2.3.0) must be updated at every release."""
 import sys, pathlib, threading, functools, http.server
 from playwright.sync_api import sync_playwright
 
@@ -23,7 +23,7 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
   core: { Channel, invoke: async (cmd, args) => {
   window.__calls.push([cmd, JSON.parse(JSON.stringify(args && args.req || {}))]);
   if (cmd === 'set_lang') { window.__lang = args.lang; return null; }
-  if (cmd === 'app_info') return {hostname:'SRV01.corp.example', ip:'172.16.7.42', version:'2.2.0', os:'windows'};
+  if (cmd === 'app_info') return {hostname:'SRV01.corp.example', ip:'172.16.7.42', version:'2.3.0', os:'windows'};
   if (cmd === 'internet_check') return window.__online ? {online:true, target:'1.1.1.1', rtt_ms:12.3, local_ip:'172.16.7.42'} : {online:false, target:null, rtt_ms:null};
   // "Ferma" (Stop): interrupts the running test of the same tool
   if (cmd === 'ping_stop' || cmd === 'traceroute_stop') { const f = window.__probe[cmd.replace('_stop', '')]; if (f) f(); return null; }
@@ -136,6 +136,30 @@ window.__TAURI__ = { window: { getCurrentWindow: () => ({
       prefixes:[{prefix:'2001:db8:1::/64', iface:'Ethernet', on_link:true, valid_s:86400, via:[]}],
       n_devices:5, n_v4:v4, n_v6:v6, unresolved:6, checks, probe: pr,
       csv:'MAC;Produttore;Famiglia;Indirizzo;Ambito;Stato;Scheda;Ruolo\r\n00:50:56:aa:00:01;Esempio Networks;IPv4;172.16.1.1;;reachable;Ethernet;gateway'};
+  }
+  // Local network, Bonjour and UPnP tabs: results of the multicast discovery
+  if (cmd === 'bonjour_scan') {
+    const C = (area, status, name, detail) => ({area, status, name, detail});
+    const S = (instance, kind, label, port, txt) => ({instance, kind, label, port, txt: txt || []});
+    return {n_hosts:3, n_services:5, n_types:3, n_ifaces:2, seconds:+args.req.seconds,
+      hosts:[
+        {name:'printer1.local', addrs:['172.16.1.47', 'fe80::217:c8ff:fe11:2233'], services:[S('Office printer', '_ipp._tcp', 'Stampante (IPP)', 631, ['rp=ipp/print', 'ty=Esempio 5000']), S('Office printer', '_http._tcp', 'Web (HTTP)', 80)]},
+        {name:'sw1.local', addrs:['172.16.1.2'], services:[S('sw1', '_telnet._tcp', 'Telnet', 23)]},
+        {name:'nas.local', addrs:['172.16.1.60'], services:[S('NAS', '_smb._tcp', 'Condivisione file (SMB)', 445), S('NAS', '_ssh._tcp', 'SSH', 22)]}],
+      types:[{kind:'_http._tcp', label:'Web (HTTP)', count:1}, {kind:'_ipp._tcp', label:'Stampante (IPP)', count:1}, {kind:'_telnet._tcp', label:'Telnet', count:1}],
+      checks:[C('Bonjour', 'ok', 'Servizi trovati', '5 servizi di 3 tipi su 3 host'), C('Bonjour', 'warn', 'Protocollo non cifrato annunciato', 'sw1.local (_telnet._tcp)'), C('Bonjour', 'info', 'Accesso remoto o condivisione annunciati', 'nas.local (_smb._tcp)')],
+      csv:'Host;Indirizzi;Istanza;Tipo;Descrizione;Porta;TXT\r\nprinter1.local;172.16.1.47;Office printer;_ipp._tcp;Stampante (IPP);631;rp=ipp/print'};
+  }
+  if (cmd === 'upnp_scan') {
+    const C = (area, status, name, detail) => ({area, status, name, detail});
+    const D = o => Object.assign({ip:'', location:'', server:'', kind:'', label:'', friendly_name:'', manufacturer:'', manufacturer_url:'', model_name:'', model_number:'', model_description:'', serial_number:'', udn:'', presentation_url:'', device_type:'', services:[], embedded:[], targets:[], described:true, note:'', igd:false}, o);
+    return {n_devices:2, n_services:2, n_ifaces:1, seconds:+args.req.seconds,
+      devices:[
+        D({ip:'172.16.1.1', location:'http://172.16.1.1:5000/d.xml', server:'Linux UPnP/1.1 MiniUPnPd/2.2', kind:'InternetGatewayDevice', label:'Router / gateway (IGD)', friendly_name:'Router & Co', manufacturer:'Esempio Networks', model_name:'ER-100', model_number:'1.2', device_type:'urn:schemas-upnp-org:device:InternetGatewayDevice:1', udn:'uuid:1111', presentation_url:'http://172.16.1.1/',
+          services:[{service_type:'urn:schemas-upnp-org:service:Layer3Forwarding:1', short:'Layer3Forwarding', control_url:'/ctl/L3F'}, {service_type:'urn:schemas-upnp-org:service:WANIPConnection:1', short:'WANIPConnection', control_url:'/ctl/IPConn'}], embedded:['WANDevice'], targets:['upnp:rootdevice'], igd:true}),
+        D({ip:'172.16.1.90', location:'http://172.16.1.90:80/x.xml', kind:'MediaRenderer', label:'Riproduttore multimediale (DLNA)', described:false, note:'la descrizione risponde HTTP 404', targets:['upnp:rootdevice']})],
+      checks:[C('UPnP', 'ok', 'Dispositivi trovati', '2 dispositivi UPnP, 2 servizi dichiarati'), C('UPnP', 'warn', 'UPnP attivo su un router', 'Router & Co (172.16.1.1) è un Internet Gateway Device'), C('UPnP', 'info', 'Descrizione non letta', '1 dispositivi')],
+      csv:'IP;Nome;Produttore;Modello;Tipo;Servizi;Descrizione\r\n172.16.1.1;Router & Co;Esempio Networks;ER-100 1.2;InternetGatewayDevice;Layer3Forwarding WANIPConnection;http://172.16.1.1:5000/d.xml'};
   }
   // Subnet scan and TCP ports in streaming: like the backend,
   // hosts and open ports arrive on the Channel in the order they are found, the final response
@@ -793,7 +817,7 @@ with sync_playwright() as p:
         # startup: home screen, no menu item selected
         assert pg.locator('#view-home').is_visible(), 'home non visibile'
         assert pg.locator('.nav-item[aria-current]').count() == 0
-        assert pg.inner_text('#home-version') == '2.2.0'
+        assert pg.inner_text('#home-version') == '2.3.0'
         assert pg.get_attribute('.topbar .brand', 'title') == 'SRV01.corp.example · 172.16.7.42'
         assert pg.locator('#brand-host').count() == 0 and 'App desktop' not in pg.inner_text('.topbar')
         assert pg.evaluate("document.querySelector('.topbar').getBoundingClientRect().height") == 40
@@ -837,7 +861,7 @@ with sync_playwright() as p:
         assert pg.evaluate("""Promise.all(['home-map.webp', 'home-ground.webp'].map(u => new Promise(ok => {
           const i = new Image(); i.onload = () => ok(i.naturalWidth > 1000); i.onerror = () => ok(false); i.src = u; }))).then(r => r.every(Boolean))""")
         cr = pg.inner_text('.side-credits')
-        assert 'Versione 2.2.0' in cr and '© 2026 Giorgio Casciola' in cr and 'Apache 2.0' in cr, cr
+        assert 'Versione 2.3.0' in cr and '© 2026 Giorgio Casciola' in cr and 'Apache 2.0' in cr, cr
         for w, h in ((1000, 640), (1920, 1080), (1269, 700)):
             pg.set_viewport_size({'width': w, 'height': h}); pg.wait_for_timeout(100)
             home_layout(pg, theme)
@@ -1874,6 +1898,56 @@ with sync_playwright() as p:
         pg.click('#res-neigh .strip >> nth=0 >> .nb-row >> nth=0 >> .lan-main')
         pg.click('#res-neigh .strip >> nth=0 >> [data-goto="ping"]')
         assert pg.locator('#view-ping').is_visible() and pg.input_value('#ping-host') == '172.16.1.1'
+        # Local network, Bonjour tab: services by host, types, exposure checks
+        pg.click('.nav-item[data-view="lan"]')
+        pg.click('#view-lan [data-tab="bonjour"]')
+        assert pg.locator('#view-lan [data-pane="lan-bonjour"]').is_visible() and pg.locator('#view-lan [data-pane="lan-neigh"]').is_hidden()
+        assert pg.locator('#view-lan [placeholder]').count() == 0
+        pg.select_option('#bonjour-sec', '10')
+        pg.click('#bonjour-btn')
+        pg.wait_for_selector('#res-bonjour .strip.warn')
+        assert [c for c in pg.evaluate('window.__calls') if c[0] == 'bonjour_scan'][-1][1] == {'seconds': '10'}
+        sm = pg.inner_text('#res-bonjour .strip .summary')
+        assert '5 servizi su 3 host' in sm and '3 tipi' in sm and '2 schede, 10 s' in sm, sm
+        assert pg.eval_on_selector_all('#res-bonjour .rtabs button', 'b => b.map(x => x.textContent)') == ['Controlli3', 'Host3', 'Tipi di servizio3']
+        t = pg.eval_on_selector_all('#res-bonjour [data-rpane="chk"] tbody tr', 'r => r.map(x => x.children[2].textContent)')
+        assert t[0] == 'Protocollo non cifrato annunciato' and t[-1] == 'Servizi trovati', t   # severity order
+        pg.click('#res-bonjour .rtabs [data-rtab="host"]')
+        assert pg.eval_on_selector_all('#res-bonjour .nb-row', 'r => r.map(x => x.dataset.dk)') == ['printer1.local', 'sw1.local', 'nas.local']
+        pg.click('#res-bonjour .nb-row >> nth=0 >> .lan-main')
+        det = pg.inner_text('#res-bonjour .nb-detail')
+        assert '631' in det and 'rp=ipp/print' in det and 'Stampante (IPP)' in det, det
+        pg.fill('#res-bonjour [data-dsq]', 'smb')
+        assert pg.eval_on_selector_all('#res-bonjour .nb-row', 'r => r.map(x => x.dataset.dk)') == ['nas.local']
+        assert pg.evaluate("document.activeElement === document.querySelector('#res-bonjour [data-dsq]')")
+        pg.fill('#res-bonjour [data-dsq]', '')
+        pg.click('#res-bonjour [data-dscsv]')
+        pg.wait_for_function('window.__copied !== undefined && window.__copied.startsWith("Host;Indirizzi;")')
+        pg.screenshot(path=str(OUT / f'bonjour-host-{theme}.png'))
+        pg.click('#res-bonjour .nb-row >> nth=0 >> [data-goto="portscan"]')
+        assert pg.locator('#view-portscan').is_visible() and pg.input_value('#scan-host') == '172.16.1.47'
+        # Local network, UPnP tab: router with IGD flagged, device without description
+        pg.click('.nav-item[data-view="lan"]')
+        pg.click('#view-lan [data-tab="upnp"]')
+        assert pg.locator('#view-lan [data-pane="lan-upnp"]').is_visible() and pg.locator('#view-lan [data-pane="lan-bonjour"]').is_hidden()
+        pg.click('#upnp-btn')
+        pg.wait_for_selector('#res-upnp .strip.warn')
+        assert [c for c in pg.evaluate('window.__calls') if c[0] == 'upnp_scan'][-1][1] == {'seconds': '5'}
+        sm = pg.inner_text('#res-upnp .strip .summary')
+        assert '2 dispositivi' in sm and '2 servizi dichiarati' in sm, sm
+        t = pg.eval_on_selector_all('#res-upnp [data-rpane="chk"] tbody tr', 'r => r.map(x => x.children[2].textContent)')
+        assert t[0] == 'UPnP attivo su un router', t
+        pg.click('#res-upnp .rtabs [data-rtab="dev"]')
+        rows = pg.eval_on_selector_all('#res-upnp .nb-row', 'r => r.map(x => x.innerText)')
+        assert len(rows) == 2 and 'Router & Co' in rows[0] and 'IGD' in rows[0] and 'senza descrizione' in rows[1], rows
+        pg.click('#res-upnp .nb-row >> nth=0 >> .lan-main')
+        det = pg.inner_text('#res-upnp .nb-detail')
+        assert 'Esempio Networks' in det and 'WANIPConnection' in det and '/ctl/IPConn' in det and 'MiniUPnPd' in det, det
+        pg.click('#res-upnp .nb-row >> nth=1 >> .lan-main')
+        assert 'HTTP 404' in pg.inner_text('#res-upnp .nb-detail >> nth=1')
+        pg.screenshot(path=str(OUT / f'upnp-dispositivi-{theme}.png'))
+        pg.click('#res-upnp .strip-copy')
+        pg.wait_for_function('window.__copied !== undefined && window.__copied.startsWith("Dispositivi UPnP")')
         # password generator
         pg.click('.nav-item[data-view="pwgen"]')
         assert pg.locator('#view-pwgen').is_visible()

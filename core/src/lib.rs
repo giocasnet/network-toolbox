@@ -5,6 +5,7 @@
 //! serves both the live mode and the single-response mode.
 
 pub mod blacklist;
+pub mod bonjour;
 pub mod clipboard;
 pub mod dns;
 pub mod email;
@@ -12,6 +13,7 @@ pub mod http;
 pub mod i18n;
 pub mod icmp;
 pub mod lan;
+pub mod mcast;
 pub mod mtu;
 pub mod myip;
 pub mod neigh;
@@ -32,6 +34,7 @@ pub mod sweep;
 pub mod tcp;
 pub mod tls;
 pub mod trace;
+pub mod upnp;
 pub mod util;
 pub mod uuid;
 pub mod whois;

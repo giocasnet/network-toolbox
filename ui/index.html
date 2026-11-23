@@ -701,7 +701,7 @@ input[type=range]{width:100%; height:22px; accent-color:var(--focus); cursor:poi
   </nav>
 
   <div class="side-credits">
-    <div>Versione <span id="home-version">2.2.0</span></div>
+    <div>Versione <span id="home-version">2.3.0</span></div>
     <div>© 2026 Giorgio Casciola</div>
     <div>Licenza Apache 2.0</div>
   </div>
@@ -799,11 +799,13 @@ input[type=range]{width:100%; height:22px; accent-color:var(--focus); cursor:poi
 <section class="view" id="view-lan">
   <header class="view-head">
     <h1>Rete locale</h1>
-    <p class="lede">Inventario degli host di una rete fino a /21: nome, produttore della scheda di rete, modello letto via SNMP e, se vuoi, i servizi in ascolto. Clicca un host per i dettagli. La scheda Vicini legge invece le tabelle ARP e NDP di questo PC.</p>
+    <p class="lede">Inventario degli host di una rete fino a /21: nome, produttore della scheda di rete, modello letto via SNMP e, se vuoi, i servizi in ascolto. Clicca un host per i dettagli. Le schede Vicini, Bonjour e UPnP cercano invece i dispositivi con altri mezzi: la tabella ARP e NDP di questo PC, i servizi annunciati in multicast.</p>
   </header>
   <div class="seg dx-seg" role="tablist" data-tabs="lan">
     <button type="button" role="tab" data-tab="scan" aria-selected="true">Scansione della rete</button>
     <button type="button" role="tab" data-tab="neigh" aria-selected="false">Vicini (ARP e NDP)</button>
+    <button type="button" role="tab" data-tab="bonjour" aria-selected="false">Bonjour</button>
+    <button type="button" role="tab" data-tab="upnp" aria-selected="false">UPnP</button>
   </div>
   <div data-pane="lan-scan">
   <form class="panel" data-submit="lan" data-stop="lan_stop">
@@ -830,6 +832,28 @@ input[type=range]{width:100%; height:22px; accent-color:var(--focus); cursor:poi
     <p class="note">Legge la tabella dei vicini di questo PC, ARP per IPv4 e NDP per IPv6, e unisce gli indirizzi per MAC. Non invia nulla: compaiono gli host che hanno parlato di recente con il PC, e Windows dimentica i vicini dopo qualche minuto. Ogni aggiornamento viene confrontato con il precedente (stesso IP con MAC diverso, gateway o router IPv6 cambiati). Il confronto vale finché l'app resta aperta.</p>
   </form>
   <div class="results" id="res-neigh"></div>
+  </div>
+  <div data-pane="lan-bonjour" class="hidden">
+  <form class="panel" data-submit="bonjour" data-stop="bonjour_stop">
+    <div class="row">
+      <div class="field wf-inline"><label for="bonjour-sec" style="white-space:nowrap">Ascolta per</label>
+        <select id="bonjour-sec"><option value="4">4 s</option><option value="6" selected>6 s</option><option value="10">10 s</option><option value="20">20 s</option></select></div>
+      <button class="btn" type="submit" id="bonjour-btn">Cerca</button>
+    </div>
+    <p class="note">Elenca i servizi annunciati con Bonjour (mDNS e DNS-SD): stampanti, AirPlay, condivisioni file, SSH, interfacce web, dispositivi smart. Invia solo domande multicast (UDP 5353) su ogni scheda IPv4 e raccoglie le risposte: non scrive e non annuncia nulla. Vede solo la rete a cui è collegata ogni scheda: il multicast non attraversa i router e alcuni access point Wi-Fi isolano i client.</p>
+  </form>
+  <div class="results" id="res-bonjour"></div>
+  </div>
+  <div data-pane="lan-upnp" class="hidden">
+  <form class="panel" data-submit="upnp" data-stop="upnp_stop">
+    <div class="row">
+      <div class="field wf-inline"><label for="upnp-sec" style="white-space:nowrap">Ascolta per</label>
+        <select id="upnp-sec"><option value="3">3 s</option><option value="5" selected>5 s</option><option value="10">10 s</option></select></div>
+      <button class="btn" type="submit" id="upnp-btn">Cerca</button>
+    </div>
+    <p class="note">Cerca i dispositivi UPnP con una ricerca SSDP (multicast UDP 1900) su ogni scheda IPv4, poi legge la descrizione di ciascuno: produttore, modello, servizi. Un router con UPnP IGD attivo permette ai programmi della rete di aprire porte verso Internet: viene segnalato. L'app non invia comandi ai dispositivi e non legge le porte già aperte sul router.</p>
+  </form>
+  <div class="results" id="res-upnp"></div>
   </div>
 </section>
 
